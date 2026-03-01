@@ -1,0 +1,111 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum EventCategory {
+  SPORTS
+  MUSICAL
+  WORKSHOPS
+  EXHIBITIONS
+  CULTURAL
+  RELIGIOUS
+}
+
+enum VoteType {
+  RSVP
+  ORGANISER_VOTE
+}
+
+enum SponsorType {
+  GOLD
+  SILVER
+  PARTNER
+}
+
+model User {
+  id             String   @id @default(cuid())
+  name           String
+  username       String   @unique
+  itNumber       String   @unique
+  email          String   @unique
+  password       String
+  organiserBadge Boolean  @default(false)
+  role           String   @default("student")
+  createdAt      DateTime @default(now())
+
+  eventsCreated  Event[]
+  tickets        Ticket[]
+  votes          Vote[]
+}
+
+model Event {
+  id                String        @id @default(cuid())
+  name              String
+  category          EventCategory
+  date              DateTime
+  location          String
+  description       String?
+  customFields      Json?
+  ticketRequired    Boolean       @default(false)
+  sponsorRequested  Boolean       @default(false)
+  sponsorsReady     Boolean       @default(false)
+  published         Boolean       @default(false)
+  approved          Boolean       @default(false)
+  createdById       String
+  createdAt         DateTime      @default(now())
+
+  createdBy         User          @relation(fields: [createdById], references: [id], onDelete: Cascade)
+  tickets           Ticket[]
+  sponsors          Sponsor[]
+  votes             Vote[]
+}
+
+model Ticket {
+  id           String   @id @default(cuid())
+  eventId      String
+  userId       String
+  price        Decimal  @db.Decimal(10, 2)
+  paymentSlip  String
+  notes        String?
+  approved     Boolean  @default(false)
+  createdAt    DateTime @default(now())
+
+  event        Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([eventId])
+  @@index([userId])
+}
+
+model Sponsor {
+  id         String      @id @default(cuid())
+  eventId    String
+  type       SponsorType
+  brandName  String
+  email      String
+  createdAt  DateTime    @default(now())
+
+  event      Event       @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@index([eventId])
+}
+
+model Vote {
+  id         String    @id @default(cuid())
+  userId     String
+  eventId    String
+  voteType   VoteType
+  createdAt  DateTime  @default(now())
+
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  event      Event     @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, eventId, voteType])
+  @@index([eventId])
+}

@@ -1,0 +1,46 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+  --primary: #0f172a;
+  --accent: #10b981;
+  --secondary: #64748b;
+  --background: #ffffff;
+  --highlight: #d1fae5;
+}
+
+body {
+  @apply text-primary antialiased;
+  background:
+    radial-gradient(circle at 15% 10%, rgba(16, 185, 129, 0.12), transparent 35%),
+    radial-gradient(circle at 85% 0%, rgba(15, 23, 42, 0.09), transparent 34%),
+    var(--background);
+}
+
+@layer components {
+  .surface-card {
+    @apply rounded-2xl border border-slate-200/80 bg-white/90 shadow-sm backdrop-blur;
+  }
+
+  .input-field {
+    @apply w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-primary outline-none transition placeholder:text-slate-400 focus:border-accent focus:ring-4 focus:ring-emerald-100;
+  }
+
+  .select-field {
+    @apply input-field;
+  }
+
+  .textarea-field {
+    @apply input-field min-h-28 resize-y;
+  }
+
+  .label-text {
+    @apply mb-1.5 block text-xs font-semibold uppercase tracking-wide text-secondary;
+  }
+
+  .page-title {
+    @apply text-3xl font-bold tracking-tight text-primary md:text-4xl;
+  }
+}
