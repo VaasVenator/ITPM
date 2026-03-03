@@ -13,5 +13,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     data: { cancelled: true }
   });
 
-  return NextResponse.redirect(new URL("/admin", req.url));
+  const referer = req.headers.get("referer");
+  const redirectTo = referer ? new URL(referer) : new URL("/", req.url);
+  return NextResponse.redirect(redirectTo);
 }

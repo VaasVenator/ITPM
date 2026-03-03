@@ -12,6 +12,13 @@ const VIEWS: Array<{ id: AdminView; label: string }> = [
   { id: "pending-tickets", label: "Pending Ticket Slips" }
 ];
 
+function parseTicketQuantity(notes: string | null): number {
+  if (!notes) return 1;
+  const match = notes.match(/quantity:(\d+)/i);
+  const parsed = match ? Number(match[1]) : NaN;
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : 1;
+}
+
 export default async function AdminPage({
   searchParams
 }: {
@@ -73,7 +80,57 @@ export default async function AdminPage({
           <div className="space-y-3">
             {events.map((event) => (
               <div key={event.id} className="surface-card p-4 text-sm">
-                <p className="font-semibold text-primary">{event.name} by {event.createdBy.name}</p>
+                <div className="grid gap-4 md:grid-cols-3">
+                  <div className="md:col-span-2">
+                    {event.eventImage ? (
+                      <img src={event.eventImage} alt={`${event.name} poster`} className="mb-3 h-40 w-full rounded-xl border border-slate-200 object-cover" />
+                    ) : null}
+                    <p className="font-semibold text-primary">
+                      {event.name} by{" "}
+                      <Link className="text-accent hover:underline" href={`/organisers/${event.createdBy.id}`}>
+                        {event.createdBy.name}
+                      </Link>
+                    </p>
+                    <p className="mt-1 text-secondary">Category: {event.category}</p>
+                    <p className="text-secondary">Date & Time: {new Date(event.date).toLocaleString()}</p>
+                    <p className="text-secondary">Location: {event.location}</p>
+                    <p className="mt-2 text-secondary">Description: {event.description || "N/A"}</p>
+                    <p className="mt-2 text-secondary">Ticket Required: {event.ticketRequired ? "Yes" : "No"}</p>
+                    <p className="text-secondary">Sponsor Requested: {event.sponsorRequested ? "Yes" : "No"}</p>
+                    <p className="text-secondary">Sponsors Ready: {event.sponsorsReady ? "Yes" : "No"}</p>
+                    <p className="text-secondary">Submitted At: {new Date(event.createdAt).toLocaleString()}</p>
+
+                    {event.customFields && typeof event.customFields === "object" ? (
+                      <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
+                        <p className="mb-2 text-xs font-semibold uppercase tracking-[0.15em] text-secondary">Custom Fields</p>
+                        <div className="grid gap-2 sm:grid-cols-2">
+                          {Object.entries(event.customFields as Record<string, unknown>).map(([key, value]) => (
+                            <p key={key} className="text-xs text-primary">
+                              <span className="font-semibold">{key}:</span> {String(value)}
+                            </p>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
+
+                  <div className="rounded-xl border border-emerald-100 bg-highlight/40 p-3">
+                    <p className="text-xs font-semibold uppercase tracking-[0.15em] text-secondary">Requested By</p>
+                    <p className="mt-2 text-sm font-semibold text-primary">{event.createdBy.name}</p>
+                    <p className="mt-1 text-xs text-secondary">
+                      Username: <span className="font-medium text-primary">{event.createdBy.username}</span>
+                    </p>
+                    <p className="text-xs text-secondary break-all">
+                      Email: <span className="font-medium text-primary">{event.createdBy.email}</span>
+                    </p>
+                    <p className="mt-1 text-xs text-secondary">
+                      Account Created: <span className="font-medium text-primary">{new Date(event.createdBy.createdAt).toLocaleString()}</span>
+                    </p>
+                    <p className="mt-1 text-xs text-secondary">
+                      Organiser Badge: <span className="font-medium text-primary">{event.createdBy.organiserBadge ? "Yes" : "No"}</span>
+                    </p>
+                  </div>
+                </div>
                 <div className="mt-3 flex gap-3">
                   <form action={`/api/admin/events/${event.id}/approve`} method="post"><button className="rounded-lg bg-accent px-3 py-2 font-semibold text-white transition hover:bg-brand-dark">Approve</button></form>
                   <form action={`/api/admin/events/${event.id}/reject`} method="post"><button className="rounded-lg bg-primary px-3 py-2 font-semibold text-white transition hover:bg-slate-800">Reject</button></form>
@@ -91,7 +148,7 @@ export default async function AdminPage({
           <div className="space-y-3">
             {publishedEvents.map((event) => (
               <div key={event.id} className="surface-card p-4 text-sm">
-                <p className="font-semibold text-primary">{event.name} by {event.createdBy.name}</p>
+                <p className="font-semibold text-primary">{event.name} by <Link className="text-accent hover:underline" href={`/organisers/${event.createdBy.id}`}>{event.createdBy.name}</Link></p>
                 <p className="mt-1 text-secondary">{new Date(event.date).toLocaleString()} • {event.location}</p>
                 <div className="mt-3 flex gap-3">
                   {!event.cancelled ? (
@@ -118,7 +175,7 @@ export default async function AdminPage({
           <div className="space-y-3">
             {cancelledEvents.map((event) => (
               <div key={event.id} className="surface-card p-4 text-sm">
-                <p className="font-semibold text-primary">{event.name} by {event.createdBy.name}</p>
+                <p className="font-semibold text-primary">{event.name} by <Link className="text-accent hover:underline" href={`/organisers/${event.createdBy.id}`}>{event.createdBy.name}</Link></p>
                 <p className="mt-1 text-secondary">{new Date(event.date).toLocaleString()} • {event.location}</p>
               </div>
             ))}
@@ -133,7 +190,7 @@ export default async function AdminPage({
           <div className="space-y-3">
             {deletedEvents.map((event) => (
               <div key={event.id} className="surface-card p-4 text-sm">
-                <p className="font-semibold text-primary">{event.name} by {event.createdBy.name}</p>
+                <p className="font-semibold text-primary">{event.name} by <Link className="text-accent hover:underline" href={`/organisers/${event.createdBy.id}`}>{event.createdBy.name}</Link></p>
                 <p className="mt-1 text-secondary">{new Date(event.date).toLocaleString()} • {event.location}</p>
               </div>
             ))}
@@ -149,7 +206,9 @@ export default async function AdminPage({
             {tickets.map((ticket) => (
               <div key={ticket.id} className="surface-card p-4 text-sm">
                 <p className="font-semibold text-primary">{ticket.user.name} • {ticket.event.name}</p>
-                <p className="mt-1 text-secondary">Amount: LKR {Number(ticket.price).toFixed(2)}</p>
+                <p className="mt-1 text-secondary">Quantity: {parseTicketQuantity(ticket.notes)}</p>
+                <p className="text-secondary">Amount per ticket: LKR {Number(ticket.price).toFixed(2)}</p>
+                <p className="text-secondary">Total amount: LKR {(Number(ticket.price) * parseTicketQuantity(ticket.notes)).toFixed(2)}</p>
                 {ticket.paymentSlip.startsWith("data:image/") ? (
                   <img
                     src={ticket.paymentSlip}

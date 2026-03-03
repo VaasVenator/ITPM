@@ -108,7 +108,8 @@ export function EventForm() {
         return;
       }
 
-      window.location.href = "/my-events";
+      window.alert("Event details submitted successfully. The authorities will review your event details soon.");
+      window.location.href = "/";
     } catch {
       setFormError("Network error while submitting event. Try again.");
     }

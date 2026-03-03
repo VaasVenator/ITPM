@@ -3,10 +3,20 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 
-export function TicketForm({ eventId, price }: { eventId: string; price: string }) {
+export function TicketForm({
+  eventId,
+  price,
+  remainingForUser
+}: {
+  eventId: string;
+  price: string;
+  remainingForUser: number;
+}) {
   const [paymentSlip, setPaymentSlip] = useState("");
+  const [quantity, setQuantity] = useState(1);
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const numericPrice = Number(String(price).replace(/[^\d.]/g, "")) || 0;
 
   async function onPickSlip(file: File | null) {
     if (!file) return;
@@ -31,6 +41,16 @@ export function TicketForm({ eventId, price }: { eventId: string; price: string 
     e.preventDefault();
     setError("");
 
+    if (remainingForUser <= 0) {
+      setError("You have already reached the maximum of 5 tickets for this event.");
+      return;
+    }
+
+    if (!Number.isInteger(quantity) || quantity < 1 || quantity > remainingForUser) {
+      setError(`You can buy between 1 and ${remainingForUser} ticket(s).`);
+      return;
+    }
+
     if (!paymentSlip.trim()) {
       setError("Bank slip image is required.");
       return;
@@ -41,7 +61,7 @@ export function TicketForm({ eventId, price }: { eventId: string; price: string 
       const res = await fetch("/api/tickets", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ eventId, paymentSlip, displayedPrice: price })
+        body: JSON.stringify({ eventId, paymentSlip, displayedPrice: price, quantity })
       });
 
       if (res.status === 401) {
@@ -67,6 +87,21 @@ export function TicketForm({ eventId, price }: { eventId: string; price: string 
   return (
     <form className="space-y-3 rounded-2xl border border-emerald-100 bg-highlight/40 p-4" onSubmit={onSubmit}>
       <p className="text-sm font-semibold text-primary">Ticket price: LKR {price}</p>
+      <p className="text-xs font-medium text-secondary">Remaining tickets you can buy: {remainingForUser}</p>
+      <div>
+        <label className="label-text">Quantity</label>
+        <input
+          className="input-field"
+          type="number"
+          min={1}
+          max={Math.max(1, remainingForUser)}
+          value={quantity}
+          onChange={(e) => setQuantity(Number(e.target.value))}
+          disabled={remainingForUser <= 0}
+          required
+        />
+      </div>
+      <p className="text-xs font-semibold text-primary">Total payable: LKR {(numericPrice * Math.max(1, quantity)).toFixed(2)}</p>
       <div>
         <label className="label-text">Bank Slip Image</label>
         <input className="input-field" type="file" accept="image/*" onChange={(e) => void onPickSlip(e.target.files?.[0] ?? null)} required />
@@ -75,7 +110,9 @@ export function TicketForm({ eventId, price }: { eventId: string; price: string 
         ) : null}
       </div>
       {error ? <p className="text-sm text-rose-600">{error}</p> : null}
-      <Button type="submit" disabled={isSubmitting}>{isSubmitting ? "Submitting..." : "Submit payment slip"}</Button>
+      <Button type="submit" disabled={isSubmitting || remainingForUser <= 0}>
+        {remainingForUser <= 0 ? "Ticket limit reached (5/5)" : isSubmitting ? "Submitting..." : "Submit payment slip"}
+      </Button>
     </form>
   );
 }

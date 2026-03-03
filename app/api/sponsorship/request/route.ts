@@ -3,15 +3,20 @@ import { getSessionUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { sendSponsorEmail } from "@/lib/mailer";
 
+const SPONSOR_PACKAGE_LABELS: Record<"GOLD" | "SILVER" | "PARTNER", string> = {
+  GOLD: "Title Sponsor (Premium)",
+  SILVER: "Associate Sponsor",
+  PARTNER: "Community Partner"
+};
+
 export async function POST(req: NextRequest) {
   try {
     const user = await getSessionUser();
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const body = await req.json();
-    const { eventId, title, sponsors } = body as {
+    const { eventId, sponsors } = body as {
       eventId: string;
-      title: string;
       sponsors: Array<{ type: "GOLD" | "SILVER" | "PARTNER"; brandName: string; email: string }>;
     };
 
@@ -33,7 +38,7 @@ export async function POST(req: NextRequest) {
       }),
       prisma.event.update({
         where: { id: eventId },
-        data: { sponsorRequested: true, published: true }
+        data: { sponsorRequested: true, published: false, sponsorsReady: false }
       })
     ]);
 
@@ -42,8 +47,8 @@ export async function POST(req: NextRequest) {
       try {
         await sendSponsorEmail({
           to: sponsor.email,
-          sponsorType: sponsor.type,
-          eventTitle: title || event.name
+          sponsorType: SPONSOR_PACKAGE_LABELS[sponsor.type] ?? sponsor.type,
+          eventTitle: event.name
         });
       } catch (error) {
         const message = error instanceof Error ? error.message : "Unknown email error";

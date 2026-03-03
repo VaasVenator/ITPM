@@ -44,7 +44,10 @@ function EventGrid({ events, isAdmin }: { events: HomeEvent[]; isAdmin: boolean 
           <p className="mt-1 text-sm text-secondary">{new Date(event.date).toLocaleString()}</p>
           <p className="text-sm text-secondary">{event.location}</p>
           <p className="mt-3 text-sm text-primary">
-            Organiser: {event.createdBy.name}
+            Organiser:{" "}
+            <Link href={`/organisers/${event.createdBy.id}`} className="font-semibold text-accent hover:underline">
+              {event.createdBy.name}
+            </Link>
             {event.createdBy.organiserBadge ? (
               <span className="ml-2 rounded-full bg-highlight px-2 py-0.5 text-xs font-semibold text-emerald-700">Organiser</span>
             ) : null}
