@@ -40,7 +40,9 @@ export default async function RootLayout({ children }: { children: React.ReactNo
               </span>
             </Link>
             <div className="flex items-center gap-4 text-sm text-secondary">
-              <Link href="/admin" className="transition hover:text-primary">Admin</Link>
+              {user?.role === "admin" ? (
+                <Link href="/admin" className="transition hover:text-primary">Admin</Link>
+              ) : null}
               {user ? (
                 <div className="flex items-center gap-3">
                   <span className="text-primary">{profile?.name ?? user.name}</span>

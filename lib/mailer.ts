@@ -29,3 +29,17 @@ export async function sendSponsorEmail(params: {
     text: `You are invited as a ${params.sponsorType} sponsor for ${params.eventTitle}. Please reply for package details.`
   });
 }
+
+export async function sendTicketApprovedEmail(params: {
+  to: string;
+  userName: string;
+  eventTitle: string;
+}) {
+  const transporter = getTransporter();
+  await transporter.sendMail({
+    from: process.env.SMTP_FROM,
+    to: params.to,
+    subject: `Payment Verified: ${params.eventTitle}`,
+    text: `Hi ${params.userName}, your payment slip for "${params.eventTitle}" has been verified successfully. Your ticket request is now approved.`
+  });
+}

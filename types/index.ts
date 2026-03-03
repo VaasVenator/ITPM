@@ -16,6 +16,7 @@ export type EventPayload = {
   date: string;
   location: string;
   description?: string;
+  eventImage: string;
   customFields?: Record<string, string>;
   ticketRequired: boolean;
   sponsorRequested?: boolean;

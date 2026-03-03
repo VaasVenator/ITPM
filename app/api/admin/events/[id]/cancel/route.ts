@@ -8,6 +8,10 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  await prisma.ticket.delete({ where: { id: params.id } });
-  return NextResponse.redirect(new URL("/admin?view=pending-tickets", req.url));
+  await prisma.event.updateMany({
+    where: { id: params.id, approved: true, published: true, deleted: false },
+    data: { cancelled: true }
+  });
+
+  return NextResponse.redirect(new URL("/admin", req.url));
 }

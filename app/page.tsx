@@ -18,7 +18,7 @@ function toColomboDateKey(date: Date): string {
   return `${year}-${month}-${day}`;
 }
 
-function EventGrid({ events }: { events: HomeEvent[] }) {
+function EventGrid({ events, isAdmin }: { events: HomeEvent[]; isAdmin: boolean }) {
   if (events.length === 0) {
     return <p className="surface-card p-5 text-sm text-secondary">No events in this section.</p>;
   }
@@ -27,7 +27,19 @@ function EventGrid({ events }: { events: HomeEvent[] }) {
     <div className="grid gap-5 md:grid-cols-2">
       {events.map((event) => (
         <article key={event.id} className="surface-card group p-5 transition hover:-translate-y-1 hover:shadow-lg">
-          <p className="inline-flex rounded-full bg-highlight px-2.5 py-1 text-xs font-semibold tracking-wide text-emerald-700">{event.category}</p>
+          {event.eventImage ? (
+            <img src={event.eventImage} alt={`${event.name} poster`} className="mb-3 h-44 w-full rounded-xl object-cover" />
+          ) : (
+            <div className="mb-3 h-44 w-full rounded-xl bg-slate-100" />
+          )}
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="inline-flex rounded-full bg-highlight px-2.5 py-1 text-xs font-semibold tracking-wide text-emerald-700">{event.category}</p>
+            {event.cancelled ? (
+              <p className="inline-flex rounded-full bg-rose-100 px-2.5 py-1 text-xs font-semibold tracking-wide text-rose-700">
+                Cancelled
+              </p>
+            ) : null}
+          </div>
           <h2 className="mt-3 text-xl font-semibold text-primary">{event.name}</h2>
           <p className="mt-1 text-sm text-secondary">{new Date(event.date).toLocaleString()}</p>
           <p className="text-sm text-secondary">{event.location}</p>
@@ -38,9 +50,27 @@ function EventGrid({ events }: { events: HomeEvent[] }) {
             ) : null}
           </p>
           <p className="mt-1 text-xs text-secondary">Votes: {event._count.votes}</p>
-          <Link className="mt-4 inline-flex items-center rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-white transition group-hover:bg-slate-800" href={`/events/${event.id}`}>
-            View details
-          </Link>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <Link className="inline-flex items-center rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-white transition group-hover:bg-slate-800" href={`/events/${event.id}`}>
+              View details
+            </Link>
+            {isAdmin ? (
+              <>
+                {!event.cancelled ? (
+                  <form action={`/api/admin/events/${event.id}/cancel`} method="post">
+                    <button className="rounded-lg bg-amber-500 px-3 py-2 text-sm font-semibold text-white transition hover:bg-amber-600" type="submit">
+                      Cancel
+                    </button>
+                  </form>
+                ) : null}
+                <form action={`/api/admin/events/${event.id}/delete`} method="post">
+                  <button className="rounded-lg bg-rose-600 px-3 py-2 text-sm font-semibold text-white transition hover:bg-rose-700" type="submit">
+                    Delete
+                  </button>
+                </form>
+              </>
+            ) : null}
+          </div>
         </article>
       ))}
     </div>
@@ -64,7 +94,7 @@ export default async function HomePage() {
   let events: HomeEvent[] = [];
   try {
     events = await prisma.event.findMany({
-      where: { approved: true, published: true },
+      where: { approved: true, published: true, deleted: false },
       include: { createdBy: true, _count: { select: { votes: true } } },
       orderBy: { date: "asc" }
     });
@@ -122,16 +152,16 @@ export default async function HomePage() {
         <h1 className="page-title">Upcoming Events</h1>
       </div>
 
-      <EventGrid events={upcomingEvents} />
+      <EventGrid events={upcomingEvents} isAdmin={user?.role === "admin"} />
 
       <div className="space-y-4">
         <h2 className="text-2xl font-bold tracking-tight text-primary">Happening Today</h2>
-        <EventGrid events={happeningTodayEvents} />
+        <EventGrid events={happeningTodayEvents} isAdmin={user?.role === "admin"} />
       </div>
 
       <div className="space-y-4">
         <h2 className="text-2xl font-bold tracking-tight text-primary">Past Events</h2>
-        <EventGrid events={pastEvents} />
+        <EventGrid events={pastEvents} isAdmin={user?.role === "admin"} />
       </div>
     </section>
   );

@@ -52,12 +52,15 @@ model Event {
   date              DateTime
   location          String
   description       String?
+  eventImage        String?
   customFields      Json?
   ticketRequired    Boolean       @default(false)
   sponsorRequested  Boolean       @default(false)
   sponsorsReady     Boolean       @default(false)
   published         Boolean       @default(false)
   approved          Boolean       @default(false)
+  cancelled         Boolean       @default(false)
+  deleted           Boolean       @default(false)
   createdById       String
   createdAt         DateTime      @default(now())
 

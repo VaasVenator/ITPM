@@ -14,7 +14,9 @@ export default async function MyEventsPage() {
       {events.map((event) => (
         <div key={event.id} className="surface-card p-5">
           <p className="text-lg font-semibold text-primary">{event.name}</p>
-          <p className="mt-1 text-sm text-secondary">Approved: {String(event.approved)} | Published: {String(event.published)}</p>
+          <p className="mt-1 text-sm text-secondary">
+            Approved: {String(event.approved)} | Published: {String(event.published)} | Cancelled: {String(event.cancelled)} | Deleted: {String(event.deleted)}
+          </p>
           {event.approved && !event.published ? (
             <div className="mt-3 flex flex-wrap gap-3 text-sm">
               <Link href={`/sponsorship/${event.id}`} className="rounded-lg bg-highlight px-3 py-2 font-semibold text-primary transition hover:bg-emerald-100">

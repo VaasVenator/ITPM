@@ -4,7 +4,7 @@ import { getSessionUser } from "@/lib/auth";
 
 export async function GET(_: NextRequest, { params }: { params: { id: string } }) {
   const event = await prisma.event.findUnique({ where: { id: params.id }, include: { createdBy: true, sponsors: true } });
-  if (!event) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (!event || event.deleted) return NextResponse.json({ error: "Not found" }, { status: 404 });
   return NextResponse.json(event);
 }
 
