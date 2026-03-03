@@ -56,7 +56,8 @@ export function EventForm() {
     }
 
     if (!res.ok) {
-      setFormError("Submission failed. Please check fields.");
+      const data = await res.json().catch(() => null);
+      setFormError(data?.error ?? "Submission failed. Please check fields.");
       return;
     }
 

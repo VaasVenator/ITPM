@@ -1,6 +1,10 @@
 import nodemailer from "nodemailer";
 
 export function getTransporter() {
+  if (!process.env.SMTP_HOST || !process.env.SMTP_USER || !process.env.SMTP_PASS || !process.env.SMTP_FROM) {
+    throw new Error("SMTP is not configured");
+  }
+
   return nodemailer.createTransport({
     host: process.env.SMTP_HOST,
     port: Number(process.env.SMTP_PORT || 587),

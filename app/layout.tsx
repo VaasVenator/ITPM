@@ -1,6 +1,7 @@
 import "./globals.css";
 import Link from "next/link";
 import { getSessionUser } from "@/lib/auth";
+import { LogoutButton } from "@/components/ui/logout-button";
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const user = await getSessionUser();
@@ -18,10 +19,10 @@ export default async function RootLayout({ children }: { children: React.ReactNo
               <Link href="/my-events" className="transition hover:text-primary">My Events</Link>
               <Link href="/admin" className="transition hover:text-primary">Admin</Link>
               {user ? (
-                <span className="text-primary">
-                  {user.name}{" "}
-                  <span className="rounded-full bg-highlight px-2 py-0.5 text-xs font-medium text-emerald-700">Logged in</span>
-                </span>
+                <div className="flex items-center gap-3">
+                  <span className="text-primary">{user.name}</span>
+                  <LogoutButton />
+                </div>
               ) : (
                 <>
                   <Link href="/login" className="transition hover:text-primary">Login</Link>

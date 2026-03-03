@@ -15,6 +15,8 @@ export function SponsorshipForm({ eventId }: { eventId: string }) {
     { type: "GOLD", brandName: "", email: "" }
   ]);
   const [error, setError] = useState("");
+  const [warning, setWarning] = useState("");
+  const [success, setSuccess] = useState("");
 
   function updateRow(index: number, key: keyof SponsorRow, value: string) {
     const next = [...sponsors];
@@ -29,6 +31,8 @@ export function SponsorshipForm({ eventId }: { eventId: string }) {
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError("");
+    setWarning("");
+    setSuccess("");
 
     if (!title.trim()) {
       setError("Title is required.");
@@ -47,12 +51,20 @@ export function SponsorshipForm({ eventId }: { eventId: string }) {
       body: JSON.stringify({ eventId, title, sponsors })
     });
 
+    const data = await res.json().catch(() => ({}));
+
     if (!res.ok) {
-      setError("Failed to submit sponsorship request.");
+      setError(data?.error ?? "Failed to submit sponsorship request.");
       return;
     }
 
-    window.location.href = "/my-events";
+    if (data?.warning) {
+      const details = Array.isArray(data.details) ? ` (${data.details.join(" | ")})` : "";
+      setWarning(`${data.warning}${details}`);
+      return;
+    }
+
+    setSuccess("Sponsorship request submitted successfully.");
   }
 
   return (
@@ -78,6 +90,13 @@ export function SponsorshipForm({ eventId }: { eventId: string }) {
       </div>
 
       {error ? <p className="text-sm text-rose-600">{error}</p> : null}
+      {warning ? <p className="text-sm text-amber-700">{warning}</p> : null}
+      {success ? <p className="text-sm text-emerald-700">{success}</p> : null}
+      {(warning || success) ? (
+        <Button type="button" variant="secondary" onClick={() => { window.location.href = "/my-events"; }}>
+          Go to My Events
+        </Button>
+      ) : null}
       <Button type="submit">Send sponsorship emails</Button>
     </form>
   );
