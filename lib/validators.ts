@@ -14,6 +14,7 @@ export const signupSchema = z.object({
     .string()
     .toLowerCase()
     .regex(/^IT\d{8}@my\.sliit\.lk$/i, "Email must be in format IT12345678@my.sliit.lk"),
+  profileImage: z.string().optional(),
   password: z.string().min(6),
   confirmPassword: z.string().min(6)
 })

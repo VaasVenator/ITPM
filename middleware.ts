@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
-const protectedPaths = ["/create-event", "/my-events", "/admin", "/sponsorship"];
+const protectedPaths = ["/create-event", "/my-events", "/admin", "/sponsorship", "/profile"];
 
 export function middleware(req: NextRequest) {
   if (!protectedPaths.some((path) => req.nextUrl.pathname.startsWith(path))) {
@@ -18,5 +18,5 @@ export function middleware(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/create-event/:path*", "/my-events/:path*", "/admin/:path*", "/sponsorship/:path*"]
+  matcher: ["/create-event/:path*", "/my-events/:path*", "/admin/:path*", "/sponsorship/:path*", "/profile/:path*"]
 };

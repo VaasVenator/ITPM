@@ -34,6 +34,7 @@ model User {
   username       String   @unique
   itNumber       String   @unique
   email          String   @unique
+  profileImage   String?
   password       String
   organiserBadge Boolean  @default(false)
   role           String   @default("student")

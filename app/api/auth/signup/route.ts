@@ -39,6 +39,7 @@ export async function POST(req: NextRequest) {
         username: parsed.data.username,
         itNumber: parsed.data.itNumber,
         email: parsed.data.email,
+        profileImage: parsed.data.profileImage?.trim() || null,
         password: hashedPassword
       }
     });
