@@ -14,12 +14,9 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         select: { name: true, profileImage: true }
       });
     } catch {
-      // Fallback for environments where Prisma client/schema isn't updated yet.
-      const basicProfile = await prisma.user.findUnique({
-        where: { id: user.id },
-        select: { name: true }
-      });
-      profile = basicProfile ? { name: basicProfile.name, profileImage: null } : null;
+      // If Prisma cannot reach the database or the schema is behind, fall back to
+      // the session payload so the layout can still render.
+      profile = { name: user.name, profileImage: null };
     }
   }
 
