@@ -14,8 +14,11 @@ export default function ResetPasswordPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  async function handleSubmit(e: FormEvent) {
+  async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    console.log("form submitted");
+    console.log("token:", token);
+
     setError("");
     setMessage("");
 
@@ -41,6 +44,7 @@ export default function ResetPasswordPage() {
       });
 
       const data = await res.json();
+      console.log("API response:", data);
 
       if (!res.ok) {
         setError(data.error || "Failed to reset password");
@@ -52,7 +56,8 @@ export default function ResetPasswordPage() {
       setTimeout(() => {
         router.push("/login");
       }, 1500);
-    } catch {
+    } catch (err) {
+      console.error("Reset request failed:", err);
       setError("Something went wrong");
     } finally {
       setLoading(false);
