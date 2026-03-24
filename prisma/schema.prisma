@@ -40,6 +40,9 @@ model User {
   role           String   @default("student")
   createdAt      DateTime @default(now())
 
+  resetToken         String?
+  resetTokenExpiry   DateTime?
+
   eventsCreated  Event[]
   tickets        Ticket[]
   votes          Vote[]

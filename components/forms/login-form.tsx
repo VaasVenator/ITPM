@@ -9,28 +9,35 @@ export function LoginForm() {
   const [error, setError] = useState("");
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    setError("");
+  e.preventDefault();
+  setError("");
 
-    if (!identifier || !password) {
-      setError("Username/email and password are required.");
-      return;
-    }
+  if (!identifier || !password) {
+    setError("Username/email and password are required.");
+    return;
+  }
 
+  try {
     const res = await fetch("/api/auth/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ identifier, password })
     });
 
+    const data = await res.json().catch(() => ({}));
+
     if (!res.ok) {
-      setError("Invalid credentials.");
+      setError(data?.error || "Login failed.");
       return;
     }
 
     const redirectPath = new URLSearchParams(window.location.search).get("redirect");
     window.location.href = redirectPath || "/";
+  } catch (error) {
+    console.error("Login request failed:", error);
+    setError("Something went wrong while logging in.");
   }
+}
 
   return (
     <form className="space-y-4" onSubmit={onSubmit}>
