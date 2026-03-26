@@ -4,10 +4,40 @@ import { prisma } from "@/lib/prisma";
 
 export async function POST(req: Request, { params }: { params: { id: string } }) {
   const user = await getSessionUser();
+
   if (!user || user.role !== "admin") {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  await prisma.event.delete({ where: { id: params.id } });
-  return NextResponse.redirect(new URL("/admin", req.url));
+  const formData = await req.formData();
+  const adminComment = String(formData.get("adminComment") || "").trim();
+
+  if (!adminComment) {
+    return NextResponse.json({ error: "Rejection reason is required." }, { status: 400 });
+  }
+
+  const event = await prisma.event.findUnique({
+    where: { id: params.id }
+  });
+
+  if (!event || event.deleted) {
+    return NextResponse.json({ error: "Event not found." }, { status: 404 });
+  }
+
+  if (event.reviewStatus !== "PENDING") {
+    return NextResponse.json({ error: "This event has already been reviewed." }, { status: 400 });
+  }
+
+  await prisma.event.update({
+    where: { id: params.id },
+    data: {
+      approved: false,
+      published: false,
+      reviewStatus: "REJECTED",
+      adminComment,
+      reviewedAt: new Date()
+    }
+  });
+
+  return NextResponse.redirect(new URL("/admin?view=pending-events", req.url));
 }
