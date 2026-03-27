@@ -64,6 +64,11 @@ model Event {
   approved          Boolean       @default(false)
   cancelled         Boolean       @default(false)
   deleted           Boolean       @default(false)
+
+  reviewStatus      String        @default("PENDING")
+  adminComment      String?
+  reviewedAt        DateTime?
+
   createdById       String
   createdAt         DateTime      @default(now())
 
@@ -74,17 +79,22 @@ model Event {
 }
 
 model Ticket {
-  id           String   @id @default(cuid())
-  eventId      String
-  userId       String
-  price        Decimal  @db.Decimal(10, 2)
-  paymentSlip  String
-  notes        String?
-  approved     Boolean  @default(false)
-  createdAt    DateTime @default(now())
+  id              String   @id @default(cuid())
+  eventId         String
+  userId          String
+  price           Decimal  @db.Decimal(10, 2)
+  paymentSlip     String
+  notes           String?
+  approved        Boolean  @default(false)
 
-  event        Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  reviewStatus    String   @default("PENDING")
+  adminComment    String?
+  reviewedAt      DateTime?
+
+  createdAt       DateTime @default(now())
+
+  event           Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([eventId])
   @@index([userId])

@@ -4,19 +4,40 @@ import { prisma } from "@/lib/prisma";
 
 export async function POST(req: Request, { params }: { params: { id: string } }) {
   const user = await getSessionUser();
+
   if (!user || user.role !== "admin") {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const event = await prisma.event.update({
+  const formData = await req.formData();
+  const adminComment = String(formData.get("adminComment") || "").trim();
+
+  const event = await prisma.event.findUnique({
+    where: { id: params.id }
+  });
+
+  if (!event || event.deleted) {
+    return NextResponse.json({ error: "Event not found." }, { status: 404 });
+  }
+
+  if (event.reviewStatus !== "PENDING") {
+    return NextResponse.json({ error: "This event has already been reviewed." }, { status: 400 });
+  }
+
+  const updatedEvent = await prisma.event.update({
     where: { id: params.id },
-    data: { approved: true }
+    data: {
+      approved: true,
+      reviewStatus: "APPROVED",
+      adminComment: adminComment || "Approved by admin",
+      reviewedAt: new Date()
+    }
   });
 
   await prisma.user.update({
-    where: { id: event.createdById },
+    where: { id: updatedEvent.createdById },
     data: { organiserBadge: true }
   });
 
-  return NextResponse.redirect(new URL("/admin", req.url));
+  return NextResponse.redirect(new URL("/admin?view=pending-events", req.url));
 }
