@@ -101,7 +101,7 @@ export default async function EventSpotlightPage({
             />
           ) : (
             <div className="flex h-72 w-full items-center justify-center rounded-xl bg-slate-200 text-sm font-semibold text-secondary">
-              Event Poster
+              No preview available
             </div>
           )}
         </div>
@@ -109,7 +109,6 @@ export default async function EventSpotlightPage({
     </div>
   );
 }
-
 
 
 

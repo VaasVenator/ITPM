@@ -10,20 +10,20 @@ export async function GET(_: NextRequest, { params }: { params: { id: string } }
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   const user = await getSessionUser();
-  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!user) return NextResponse.redirect(new URL("/login", req.url));
 
   const form = await req.formData();
   const action = String(form.get("action") || "");
 
   if (action === "publishWithoutSponsors") {
-    const event = await prisma.event.updateMany({
+    await prisma.event.updateMany({
       where: { id: params.id, createdById: user.id, approved: true },
       data: { sponsorsReady: true, sponsorRequested: false, published: true }
     });
-    return NextResponse.json({ updated: event.count });
+    return NextResponse.redirect(new URL("/my-events", req.url));
   }
 
-  return NextResponse.json({ error: "Invalid action" }, { status: 400 });
+  return NextResponse.redirect(new URL("/my-events", req.url));
 }
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {

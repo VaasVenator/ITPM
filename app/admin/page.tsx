@@ -26,6 +26,102 @@ function parseTicketQuantity(notes: string | null): number {
   return Number.isInteger(parsed) && parsed > 0 ? parsed : 1;
 }
 
+async function loadAdminData() {
+  let supportsEventReviewHistory = true;
+  let supportsTicketReviewHistory = true;
+
+  let events;
+  let reviewedEvents;
+  try {
+    [events, reviewedEvents] = await Promise.all([
+      prisma.event.findMany({
+        where: { deleted: false, reviewStatus: "PENDING" },
+        include: { createdBy: true },
+        orderBy: { createdAt: "desc" }
+      }),
+      prisma.event.findMany({
+        where: { reviewStatus: { not: "PENDING" } },
+        include: { createdBy: true },
+        orderBy: { reviewedAt: "desc" }
+      })
+    ]);
+  } catch (error) {
+    if (!(error instanceof Error) || !error.message.includes("Unknown argument `reviewStatus`")) {
+      throw error;
+    }
+
+    supportsEventReviewHistory = false;
+    [events, reviewedEvents] = await Promise.all([
+      prisma.event.findMany({
+        where: { deleted: false, approved: false },
+        include: { createdBy: true },
+        orderBy: { createdAt: "desc" }
+      }),
+      Promise.resolve([])
+    ]);
+  }
+
+  let tickets;
+  let reviewedTickets;
+  try {
+    [tickets, reviewedTickets] = await Promise.all([
+      prisma.ticket.findMany({
+        where: { reviewStatus: "PENDING" },
+        include: { event: true, user: true },
+        orderBy: { createdAt: "desc" }
+      }),
+      prisma.ticket.findMany({
+        where: { reviewStatus: { not: "PENDING" } },
+        include: { event: true, user: true },
+        orderBy: { reviewedAt: "desc" }
+      })
+    ]);
+  } catch (error) {
+    if (!(error instanceof Error) || !error.message.includes("Unknown argument `reviewStatus`")) {
+      throw error;
+    }
+
+    supportsTicketReviewHistory = false;
+    [tickets, reviewedTickets] = await Promise.all([
+      prisma.ticket.findMany({
+        where: { approved: false },
+        include: { event: true, user: true },
+        orderBy: { createdAt: "desc" }
+      }),
+      Promise.resolve([])
+    ]);
+  }
+
+  const [publishedEvents, cancelledEvents, deletedEvents] = await Promise.all([
+    prisma.event.findMany({
+      where: { approved: true, published: true, deleted: false },
+      include: { createdBy: true },
+      orderBy: { date: "asc" }
+    }),
+    prisma.event.findMany({
+      where: { cancelled: true, deleted: false },
+      include: { createdBy: true },
+      orderBy: { date: "desc" }
+    }),
+    prisma.event.findMany({
+      where: { deleted: true },
+      include: { createdBy: true },
+      orderBy: { createdAt: "desc" }
+    })
+  ]);
+
+  return {
+    events,
+    tickets,
+    publishedEvents,
+    cancelledEvents,
+    deletedEvents,
+    reviewedEvents,
+    reviewedTickets,
+    supportsReviewHistory: supportsEventReviewHistory && supportsTicketReviewHistory
+  };
+}
+
 export default async function AdminPage({
   searchParams
 }: {
@@ -41,44 +137,16 @@ export default async function AdminPage({
     ? (searchParams?.view as AdminView)
     : "pending-events";
 
-  const [events, tickets, publishedEvents, cancelledEvents, deletedEvents, reviewedEvents, reviewedTickets] =
-    await Promise.all([
-      prisma.event.findMany({
-        where: { deleted: false, reviewStatus: "PENDING" },
-        include: { createdBy: true },
-        orderBy: { createdAt: "desc" }
-      }),
-      prisma.ticket.findMany({
-        where: { reviewStatus: "PENDING" },
-        include: { event: true, user: true },
-        orderBy: { createdAt: "desc" }
-      }),
-      prisma.event.findMany({
-        where: { approved: true, published: true, deleted: false },
-        include: { createdBy: true },
-        orderBy: { date: "asc" }
-      }),
-      prisma.event.findMany({
-        where: { cancelled: true, deleted: false },
-        include: { createdBy: true },
-        orderBy: { date: "desc" }
-      }),
-      prisma.event.findMany({
-        where: { deleted: true },
-        include: { createdBy: true },
-        orderBy: { createdAt: "desc" }
-      }),
-      prisma.event.findMany({
-        where: { reviewStatus: { not: "PENDING" } },
-        include: { createdBy: true },
-        orderBy: { reviewedAt: "desc" }
-      }),
-      prisma.ticket.findMany({
-        where: { reviewStatus: { not: "PENDING" } },
-        include: { event: true, user: true },
-        orderBy: { reviewedAt: "desc" }
-      })
-    ]);
+  const {
+    events,
+    tickets,
+    publishedEvents,
+    cancelledEvents,
+    deletedEvents,
+    reviewedEvents,
+    reviewedTickets,
+    supportsReviewHistory
+  } = await loadAdminData();
 
   return (
     <section className="space-y-8">
@@ -157,7 +225,10 @@ export default async function AdminPage({
                     <p className="mt-2 text-sm font-semibold text-primary">{event.createdBy.name}</p>
                     <p className="mt-1 text-xs text-secondary break-all">{event.createdBy.email}</p>
                     <p className="mt-2 text-xs text-secondary">
-                      Current Review Status: <span className="font-semibold text-primary">{event.reviewStatus}</span>
+                      Current Review Status:{" "}
+                      <span className="font-semibold text-primary">
+                        {"reviewStatus" in event ? event.reviewStatus : "PENDING"}
+                      </span>
                     </p>
                   </div>
                 </div>
@@ -257,6 +328,12 @@ export default async function AdminPage({
 
       {activeView === "review-history" && (
         <div className="space-y-6">
+          {!supportsReviewHistory ? (
+            <p className="surface-card p-4 text-sm text-secondary">
+              Review history is not available yet because this database is still using the older admin approval schema.
+            </p>
+          ) : null}
+
           <div>
             <h2 className="mb-3 text-xl font-semibold text-primary">Reviewed Events</h2>
             <div className="space-y-3">
