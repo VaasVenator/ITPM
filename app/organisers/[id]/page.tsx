@@ -100,7 +100,9 @@ export default async function OrganiserProfilePage({ params }: { params: { id: s
                 {event.eventImage ? (
                   <img src={event.eventImage} alt={`${event.name} poster`} className="mb-3 h-40 w-full rounded-xl object-cover" />
                 ) : (
-                  <div className="mb-3 h-40 w-full rounded-xl bg-slate-100" />
+                  <div className="mb-3 flex h-40 w-full items-center justify-center rounded-xl bg-slate-100 text-sm font-medium text-secondary">
+                    No preview available
+                  </div>
                 )}
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="inline-flex rounded-full bg-highlight px-2.5 py-1 text-xs font-semibold tracking-wide text-emerald-700">{event.category}</span>

@@ -4,7 +4,7 @@ export type EventCategory =
   | "WORKSHOPS"
   | "EXHIBITIONS"
   | "CULTURAL"
-  | "RELIGIOUS";
+  | "RELIGIOUS"
 
 export type VoteType = "RSVP" | "ORGANISER_VOTE";
 

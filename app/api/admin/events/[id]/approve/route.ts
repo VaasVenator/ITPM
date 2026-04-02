@@ -3,13 +3,13 @@ import { getSessionUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 export async function POST(req: Request, { params }: { params: { id: string } }) {
-  const user = await getSessionUser();
-
-  if (!user || user.role !== "admin") {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
-
   try {
+    const user = await getSessionUser();
+
+    if (!user || user.role !== "admin") {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
     const formData = await req.formData();
     const adminComment = String(formData.get("adminComment") || "").trim();
 
@@ -18,41 +18,46 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     });
 
     if (!event || event.deleted) {
-      return NextResponse.json({ error: "Event not found" }, { status: 404 });
+      return NextResponse.json({ error: "Event not found." }, { status: 404 });
     }
 
-    if (event.reviewStatus !== "PENDING") {
-      return NextResponse.json(
-        { error: "This event has already been reviewed" },
-        { status: 400 }
-      );
+    if (event.approved) {
+      return NextResponse.json({ error: "This event has already been reviewed." }, { status: 400 });
     }
 
-    const updatedEvent = await prisma.event.update({
-      where: { id: params.id },
-      data: {
-        approved: true,
-        published: true,
-        reviewStatus: "APPROVED",
-        adminComment: adminComment || "Approved by admin",
-        reviewedAt: new Date()
+    let updatedEvent;
+    try {
+      updatedEvent = await prisma.event.update({
+        where: { id: params.id },
+        data: {
+          approved: true,
+          reviewStatus: "APPROVED",
+          adminComment: adminComment || "Approved by admin",
+          reviewedAt: new Date()
+        }
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "";
+      if (!message.includes("does not exist") && !message.includes("Unknown argument")) {
+        throw error;
       }
-    });
+
+      updatedEvent = await prisma.event.update({
+        where: { id: params.id },
+        data: {
+          approved: true
+        }
+      });
+    }
 
     await prisma.user.update({
       where: { id: updatedEvent.createdById },
       data: { organiserBadge: true }
     });
 
-    return NextResponse.json(
-      { success: true, message: "Event approved and published successfully" },
-      { status: 200 }
-    );
+    return NextResponse.redirect(new URL("/admin?view=pending-events", req.url));
   } catch (error) {
-    console.error("Event approval error:", error);
-    return NextResponse.json(
-      { error: "Failed to approve event" },
-      { status: 500 }
-    );
+    console.error("Approve event failed:", error);
+    return NextResponse.redirect(new URL("/admin?view=pending-events", req.url));
   }
 }
