@@ -9,35 +9,50 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const formData = await req.formData();
-  const adminComment = String(formData.get("adminComment") || "").trim();
+  try {
+    const formData = await req.formData();
+    const adminComment = String(formData.get("adminComment") || "").trim();
 
-  const event = await prisma.event.findUnique({
-    where: { id: params.id }
-  });
+    const event = await prisma.event.findUnique({
+      where: { id: params.id }
+    });
 
-  if (!event || event.deleted) {
-    return NextResponse.json({ error: "Event not found." }, { status: 404 });
-  }
-
-  if (event.reviewStatus !== "PENDING") {
-    return NextResponse.json({ error: "This event has already been reviewed." }, { status: 400 });
-  }
-
-  const updatedEvent = await prisma.event.update({
-    where: { id: params.id },
-    data: {
-      approved: true,
-      reviewStatus: "APPROVED",
-      adminComment: adminComment || "Approved by admin",
-      reviewedAt: new Date()
+    if (!event || event.deleted) {
+      return NextResponse.json({ error: "Event not found" }, { status: 404 });
     }
-  });
 
-  await prisma.user.update({
-    where: { id: updatedEvent.createdById },
-    data: { organiserBadge: true }
-  });
+    if (event.reviewStatus !== "PENDING") {
+      return NextResponse.json(
+        { error: "This event has already been reviewed" },
+        { status: 400 }
+      );
+    }
 
-  return NextResponse.redirect(new URL("/admin?view=pending-events", req.url));
+    const updatedEvent = await prisma.event.update({
+      where: { id: params.id },
+      data: {
+        approved: true,
+        published: true,
+        reviewStatus: "APPROVED",
+        adminComment: adminComment || "Approved by admin",
+        reviewedAt: new Date()
+      }
+    });
+
+    await prisma.user.update({
+      where: { id: updatedEvent.createdById },
+      data: { organiserBadge: true }
+    });
+
+    return NextResponse.json(
+      { success: true, message: "Event approved and published successfully" },
+      { status: 200 }
+    );
+  } catch (error) {
+    console.error("Event approval error:", error);
+    return NextResponse.json(
+      { error: "Failed to approve event" },
+      { status: 500 }
+    );
+  }
 }

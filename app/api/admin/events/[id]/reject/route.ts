@@ -9,35 +9,52 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const formData = await req.formData();
-  const adminComment = String(formData.get("adminComment") || "").trim();
+  try {
+    const formData = await req.formData();
+    const adminComment = String(formData.get("adminComment") || "").trim();
 
-  if (!adminComment) {
-    return NextResponse.json({ error: "Rejection reason is required." }, { status: 400 });
-  }
-
-  const event = await prisma.event.findUnique({
-    where: { id: params.id }
-  });
-
-  if (!event || event.deleted) {
-    return NextResponse.json({ error: "Event not found." }, { status: 404 });
-  }
-
-  if (event.reviewStatus !== "PENDING") {
-    return NextResponse.json({ error: "This event has already been reviewed." }, { status: 400 });
-  }
-
-  await prisma.event.update({
-    where: { id: params.id },
-    data: {
-      approved: false,
-      published: false,
-      reviewStatus: "REJECTED",
-      adminComment,
-      reviewedAt: new Date()
+    if (!adminComment) {
+      return NextResponse.json(
+        { error: "Rejection reason is required" },
+        { status: 400 }
+      );
     }
-  });
 
-  return NextResponse.redirect(new URL("/admin?view=pending-events", req.url));
+    const event = await prisma.event.findUnique({
+      where: { id: params.id }
+    });
+
+    if (!event || event.deleted) {
+      return NextResponse.json({ error: "Event not found" }, { status: 404 });
+    }
+
+    if (event.reviewStatus !== "PENDING") {
+      return NextResponse.json(
+        { error: "This event has already been reviewed" },
+        { status: 400 }
+      );
+    }
+
+    await prisma.event.update({
+      where: { id: params.id },
+      data: {
+        approved: false,
+        published: false,
+        reviewStatus: "REJECTED",
+        adminComment,
+        reviewedAt: new Date()
+      }
+    });
+
+    return NextResponse.json(
+      { success: true, message: "Event rejected successfully" },
+      { status: 200 }
+    );
+  } catch (error) {
+    console.error("Event rejection error:", error);
+    return NextResponse.json(
+      { error: "Failed to reject event" },
+      { status: 500 }
+    );
+  }
 }

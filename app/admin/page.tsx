@@ -1,6 +1,13 @@
+﻿"use client";
+
+import { useEffect, useState } from "react";
 import { getSessionUser } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
 import Link from "next/link";
+import { AdminApprovalSection } from "@/components/admin-approval-section";
+import { useToast } from "@/components/toast";
+import { ApprovalMetrics } from "@/components/approval-metrics";
+import { AdvancedFilters } from "@/components/advanced-filters";
+import { AuditLog, AuditLogEntry } from "@/components/audit-log";
 
 type AdminView =
   | "pending-events"
@@ -19,85 +26,217 @@ const VIEWS: Array<{ id: AdminView; label: string }> = [
   { id: "review-history", label: "Review History" }
 ];
 
-function parseTicketQuantity(notes: string | null): number {
+function parseTicketQuantity(notes: string | null | undefined): number {
   if (!notes) return 1;
   const match = notes.match(/quantity:(\d+)/i);
   const parsed = match ? Number(match[1]) : NaN;
   return Number.isInteger(parsed) && parsed > 0 ? parsed : 1;
 }
 
-export default async function AdminPage({
+interface Event {
+  id: string;
+  name: string;
+  description?: string;
+  category: string;
+  location: string;
+  date: Date;
+  eventImage?: string;
+  ticketRequired: boolean;
+  createdAt: Date;
+  createdBy: {
+    id: string;
+    name: string;
+    email: string;
+  };
+  reviewStatus: string;
+  adminComment?: string;
+  reviewedAt?: Date;
+}
+
+interface Ticket {
+  id: string;
+  price: number;
+  paymentSlip: string;
+  notes?: string;
+  createdAt: Date;
+  reviewStatus: string;
+  user: {
+    id: string;
+    name: string;
+    email: string;
+  };
+  event: {
+    id: string;
+    name: string;
+  };
+  adminComment?: string;
+  reviewedAt?: Date;
+}
+
+export default function AdminPage({
   searchParams
 }: {
   searchParams?: { view?: string };
 }) {
-  const user = await getSessionUser();
-
-  if (!user || user.role !== "admin") {
-    return <p className="surface-card p-5 text-sm text-secondary">Admin access only.</p>;
-  }
+  const [isAuthorized, setIsAuthorized] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [events, setEvents] = useState<Event[]>([]);
+  const [tickets, setTickets] = useState<Ticket[]>([]);
+  const [publishedEvents, setPublishedEvents] = useState<Event[]>([]);
+  const [cancelledEvents, setCancelledEvents] = useState<Event[]>([]);
+  const [deletedEvents, setDeletedEvents] = useState<Event[]>([]);
+  const [reviewedEvents, setReviewedEvents] = useState<Event[]>([]);
+  const [reviewedTickets, setReviewedTickets] = useState<Ticket[]>([]);
+  const { addToast } = useToast();
+  const [filteredEvents, setFilteredEvents] = useState<Event[]>([]);
+  const [filteredTickets, setFilteredTickets] = useState<Ticket[]>([]);
+  const [auditLog, setAuditLog] = useState<AuditLogEntry[]>([]);
 
   const activeView: AdminView = VIEWS.some((v) => v.id === searchParams?.view)
     ? (searchParams?.view as AdminView)
     : "pending-events";
 
-  const [events, tickets, publishedEvents, cancelledEvents, deletedEvents, reviewedEvents, reviewedTickets] =
-    await Promise.all([
-      prisma.event.findMany({
-        where: { deleted: false, reviewStatus: "PENDING" },
-        include: { createdBy: true },
-        orderBy: { createdAt: "desc" }
-      }),
-      prisma.ticket.findMany({
-        where: { reviewStatus: "PENDING" },
-        include: { event: true, user: true },
-        orderBy: { createdAt: "desc" }
-      }),
-      prisma.event.findMany({
-        where: { approved: true, published: true, deleted: false },
-        include: { createdBy: true },
-        orderBy: { date: "asc" }
-      }),
-      prisma.event.findMany({
-        where: { cancelled: true, deleted: false },
-        include: { createdBy: true },
-        orderBy: { date: "desc" }
-      }),
-      prisma.event.findMany({
-        where: { deleted: true },
-        include: { createdBy: true },
-        orderBy: { createdAt: "desc" }
-      }),
-      prisma.event.findMany({
-        where: { reviewStatus: { not: "PENDING" } },
-        include: { createdBy: true },
-        orderBy: { reviewedAt: "desc" }
-      }),
-      prisma.ticket.findMany({
-        where: { reviewStatus: { not: "PENDING" } },
-        include: { event: true, user: true },
-        orderBy: { reviewedAt: "desc" }
-      })
-    ]);
+  useEffect(() => {
+    const checkAuth = async () => {
+      try {
+        const res = await fetch("/api/auth/profile");
+        const data = await res.json();
+
+        if (!data.user || data.user.role !== "admin") {
+          setIsAuthorized(false);
+          return;
+        }
+
+        setIsAuthorized(true);
+        await fetchData();
+      } catch (error) {
+        setIsAuthorized(false);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    checkAuth();
+  }, []);
+
+  const fetchData = async () => {
+    try {
+      const res = await fetch("/api/admin/data");
+      if (!res.ok) throw new Error("Failed to fetch data");
+      const data = await res.json();
+      setEvents(data.events);
+      setTickets(data.tickets);
+      setFilteredEvents(data.events);
+      setFilteredTickets(data.tickets);
+      setPublishedEvents(data.publishedEvents);
+      setCancelledEvents(data.cancelledEvents);
+      setDeletedEvents(data.deletedEvents);
+      setReviewedEvents(data.reviewedEvents);
+      setReviewedTickets(data.reviewedTickets);
+
+      // Build audit log from reviewed items
+      const auditEntries: AuditLogEntry[] = [];
+      data.reviewedEvents.forEach((event: Event) => {
+        auditEntries.push({
+          id: `event-${event.id}`,
+          itemName: event.name,
+          action: event.reviewStatus as "APPROVED" | "REJECTED" | "VIEWED",
+          adminName: "Admin",
+          timestamp: event.reviewedAt || new Date(),
+          itemType: "event",
+        });
+      });
+      data.reviewedTickets.forEach((ticket: Ticket) => {
+        auditEntries.push({
+          id: `ticket-${ticket.id}`,
+          itemName: `${ticket.user.name} - ${ticket.event.name}`,
+          action: ticket.reviewStatus as "APPROVED" | "REJECTED" | "VIEWED",
+          adminName: "Admin",
+          timestamp: ticket.reviewedAt || new Date(),
+          itemType: "ticket",
+        });
+      });
+      setAuditLog(auditEntries.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()));
+    } catch (error) {
+      addToast("Failed to load admin data", "error");
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <section className="space-y-8">
+        <div className="animate-pulse">
+          <div className="h-8 w-48 bg-slate-200 rounded mb-6"></div>
+          <div className="grid gap-4 md:grid-cols-4">
+            {[...Array(4)].map((_, i) => (
+              <div key={i} className="h-24 bg-slate-200 rounded-lg"></div>
+            ))}
+          </div>
+        </div>
+      </section>
+    );
+  }
+
+  if (!isAuthorized) {
+    return <p className="surface-card p-5 text-sm text-secondary">Admin access only.</p>;
+  }
+
+  const handleEventFilterChange = (filters: any) => {
+    let filtered = [...events];
+    
+    if (filters.dateFrom) {
+      filtered = filtered.filter(e => new Date(e.createdAt) >= filters.dateFrom);
+    }
+    if (filters.dateTo) {
+      const endOfDay = new Date(filters.dateTo);
+      endOfDay.setHours(23, 59, 59, 999);
+      filtered = filtered.filter(e => new Date(e.createdAt) <= endOfDay);
+    }
+    if (filters.category) {
+      filtered = filtered.filter(e => e.category === filters.category);
+    }
+    
+    setFilteredEvents(filtered);
+  };
+
+  const handleTicketFilterChange = (filters: any) => {
+    let filtered = [...tickets];
+    
+    if (filters.dateFrom) {
+      filtered = filtered.filter(t => new Date(t.createdAt) >= filters.dateFrom);
+    }
+    if (filters.dateTo) {
+      const endOfDay = new Date(filters.dateTo);
+      endOfDay.setHours(23, 59, 59, 999);
+      filtered = filtered.filter(t => new Date(t.createdAt) <= endOfDay);
+    }
+    
+    setFilteredTickets(filtered);
+  };
+
+  const eventCategories = [...new Set(events.map(e => e.category))];
 
   return (
     <section className="space-y-8">
       <h1 className="page-title">Admin Dashboard</h1>
 
+      {/* Approval Metrics */}
+      <ApprovalMetrics events={events} tickets={tickets} />
+
       <div className="grid gap-4 md:grid-cols-4">
-        <div className="surface-card p-4">
+        <div className="surface-card p-4 rounded-lg border border-slate-200">
           <p className="text-xs font-semibold uppercase text-secondary">Pending Events</p>
           <p className="mt-2 text-2xl font-bold text-primary">{events.length}</p>
         </div>
-        <div className="surface-card p-4">
+        <div className="surface-card p-4 rounded-lg border border-slate-200">
           <p className="text-xs font-semibold uppercase text-secondary">Pending Tickets</p>
           <p className="mt-2 text-2xl font-bold text-primary">{tickets.length}</p>
         </div>
-        <div className="surface-card p-4">
+        <div className="surface-card p-4 rounded-lg border border-slate-200">
           <p className="text-xs font-semibold uppercase text-secondary">Published Events</p>
           <p className="mt-2 text-2xl font-bold text-primary">{publishedEvents.length}</p>
         </div>
-        <div className="surface-card p-4">
+        <div className="surface-card p-4 rounded-lg border border-slate-200">
           <p className="text-xs font-semibold uppercase text-secondary">Reviewed Items</p>
           <p className="mt-2 text-2xl font-bold text-primary">
             {reviewedEvents.length + reviewedTickets.length}
@@ -105,15 +244,15 @@ export default async function AdminPage({
         </div>
       </div>
 
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap gap-2 pb-4 border-b border-slate-200">
         {VIEWS.map((view) => (
           <Link
             key={view.id}
             href={`/admin?view=${view.id}`}
             className={
               activeView === view.id
-                ? "rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-white"
-                : "rounded-lg bg-highlight px-3 py-2 text-sm font-semibold text-primary transition hover:bg-emerald-100"
+                ? "rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow-md transition"
+                : "rounded-lg bg-slate-100 px-4 py-2 text-sm font-semibold text-primary transition hover:bg-slate-200"
             }
           >
             {view.label}
@@ -122,210 +261,108 @@ export default async function AdminPage({
       </div>
 
       {activeView === "pending-events" && (
-        <div>
-          <h2 className="mb-3 text-xl font-semibold text-primary">Pending Event Approvals</h2>
-          <div className="space-y-3">
-            {events.map((event) => (
-              <div key={event.id} className="surface-card p-4 text-sm">
-                <div className="grid gap-4 md:grid-cols-3">
-                  <div className="md:col-span-2">
-                    {event.eventImage ? (
-                      <img
-                        src={event.eventImage}
-                        alt={`${event.name} poster`}
-                        className="mb-3 h-40 w-full rounded-xl border border-slate-200 object-cover"
-                      />
-                    ) : null}
-
-                    <p className="font-semibold text-primary">
-                      {event.name} by{" "}
-                      <Link className="text-accent hover:underline" href={`/organisers/${event.createdBy.id}`}>
-                        {event.createdBy.name}
-                      </Link>
-                    </p>
-
-                    <p className="mt-1 text-secondary">Category: {event.category}</p>
-                    <p className="text-secondary">Date & Time: {new Date(event.date).toLocaleString()}</p>
-                    <p className="text-secondary">Location: {event.location}</p>
-                    <p className="mt-2 text-secondary">Description: {event.description || "N/A"}</p>
-                    <p className="mt-2 text-secondary">Ticket Required: {event.ticketRequired ? "Yes" : "No"}</p>
-                    <p className="text-secondary">Submitted At: {new Date(event.createdAt).toLocaleString()}</p>
-                  </div>
-
-                  <div className="rounded-xl border border-emerald-100 bg-highlight/40 p-3">
-                    <p className="text-xs font-semibold uppercase tracking-[0.15em] text-secondary">Requested By</p>
-                    <p className="mt-2 text-sm font-semibold text-primary">{event.createdBy.name}</p>
-                    <p className="mt-1 text-xs text-secondary break-all">{event.createdBy.email}</p>
-                    <p className="mt-2 text-xs text-secondary">
-                      Current Review Status: <span className="font-semibold text-primary">{event.reviewStatus}</span>
-                    </p>
-                  </div>
-                </div>
-
-                <div className="mt-4 grid gap-3 md:grid-cols-2">
-                  <form action={`/api/admin/events/${event.id}/approve`} method="post" className="space-y-2 rounded-xl border border-slate-200 p-3">
-                    <label className="block text-xs font-semibold text-secondary">Approval Comment</label>
-                    <textarea
-                      name="adminComment"
-                      rows={3}
-                      className="w-full rounded-lg border border-slate-300 p-2"
-                      placeholder="Optional approval note"
-                    />
-                    <button className="rounded-lg bg-accent px-3 py-2 font-semibold text-white transition hover:bg-brand-dark">
-                      Approve Event
-                    </button>
-                  </form>
-
-                  <form action={`/api/admin/events/${event.id}/reject`} method="post" className="space-y-2 rounded-xl border border-slate-200 p-3">
-                    <label className="block text-xs font-semibold text-secondary">Rejection Reason</label>
-                    <textarea
-                      name="adminComment"
-                      rows={3}
-                      className="w-full rounded-lg border border-slate-300 p-2"
-                      placeholder="Reason is required"
-                      required
-                    />
-                    <button className="rounded-lg bg-primary px-3 py-2 font-semibold text-white transition hover:bg-slate-800">
-                      Reject Event
-                    </button>
-                  </form>
-                </div>
-              </div>
-            ))}
-            {events.length === 0 ? <p className="surface-card p-4 text-sm text-secondary">No pending events.</p> : null}
-          </div>
+        <div className="space-y-4">
+          <AdvancedFilters
+            onFilterChange={handleEventFilterChange}
+            categories={eventCategories}
+            hasDateRange={true}
+          />
+          <AdminApprovalSection
+            type="events"
+            title="Pending Event Approvals"
+            items={filteredEvents}
+            emptyMessage={filteredEvents.length === 0 && events.length > 0 ? "No events match your filters" : "No pending events to review"}
+            onItemsChange={(items) => {
+              setFilteredEvents(items as Event[]);
+              setEvents(items as Event[]);
+            }}
+          />
         </div>
       )}
 
       {activeView === "pending-tickets" && (
-        <div>
-          <h2 className="mb-3 text-xl font-semibold text-primary">Pending Ticket Slips</h2>
-          <div className="space-y-3">
-            {tickets.map((ticket) => (
-              <div key={ticket.id} className="surface-card p-4 text-sm">
-                <p className="font-semibold text-primary">{ticket.user.name} • {ticket.event.name}</p>
-                <p className="mt-1 text-secondary">Quantity: {parseTicketQuantity(ticket.notes)}</p>
-                <p className="text-secondary">Amount per ticket: LKR {Number(ticket.price).toFixed(2)}</p>
-                <p className="text-secondary">
-                  Total amount: LKR {(Number(ticket.price) * parseTicketQuantity(ticket.notes)).toFixed(2)}
-                </p>
-
-                {ticket.paymentSlip.startsWith("data:image/") ? (
-                  <img
-                    src={ticket.paymentSlip}
-                    alt={`Bank slip for ${ticket.user.name}`}
-                    className="mt-2 h-56 w-full rounded-xl border border-slate-200 object-contain bg-white"
-                  />
-                ) : (
-                  <p className="mt-1 break-all text-secondary">Slip: {ticket.paymentSlip}</p>
-                )}
-
-                <div className="mt-4 grid gap-3 md:grid-cols-2">
-                  <form action={`/api/admin/tickets/${ticket.id}/approve`} method="post" className="space-y-2 rounded-xl border border-slate-200 p-3">
-                    <label className="block text-xs font-semibold text-secondary">Approval Comment</label>
-                    <textarea
-                      name="adminComment"
-                      rows={3}
-                      className="w-full rounded-lg border border-slate-300 p-2"
-                      placeholder="Optional approval note"
-                    />
-                    <button className="rounded-lg bg-accent px-3 py-2 font-semibold text-white transition hover:bg-brand-dark">
-                      Approve Ticket Slip
-                    </button>
-                  </form>
-
-                  <form action={`/api/admin/tickets/${ticket.id}/reject`} method="post" className="space-y-2 rounded-xl border border-slate-200 p-3">
-                    <label className="block text-xs font-semibold text-secondary">Rejection Reason</label>
-                    <textarea
-                      name="adminComment"
-                      rows={3}
-                      className="w-full rounded-lg border border-slate-300 p-2"
-                      placeholder="Reason is required"
-                      required
-                    />
-                    <button className="rounded-lg bg-primary px-3 py-2 font-semibold text-white transition hover:bg-slate-800">
-                      Reject Ticket Slip
-                    </button>
-                  </form>
-                </div>
-              </div>
-            ))}
-            {tickets.length === 0 ? <p className="surface-card p-4 text-sm text-secondary">No pending ticket approvals.</p> : null}
-          </div>
+        <div className="space-y-4">
+          <AdvancedFilters
+            onFilterChange={handleTicketFilterChange}
+            hasDateRange={true}
+          />
+          <AdminApprovalSection
+            type="tickets"
+            title="Pending Ticket Slips"
+            items={filteredTickets}
+            emptyMessage={filteredTickets.length === 0 && tickets.length > 0 ? "No tickets match your filters" : "No pending ticket approvals"}
+            onItemsChange={(items) => {
+              setFilteredTickets(items as Ticket[]);
+              setTickets(items as Ticket[]);
+            }}
+          />
         </div>
       )}
 
       {activeView === "review-history" && (
-        <div className="space-y-6">
-          <div>
-            <h2 className="mb-3 text-xl font-semibold text-primary">Reviewed Events</h2>
-            <div className="space-y-3">
-              {reviewedEvents.map((event) => (
-                <div key={event.id} className="surface-card p-4 text-sm">
-                  <p className="font-semibold text-primary">{event.name}</p>
-                  <p className="text-secondary">Organiser: {event.createdBy.name}</p>
-                  <p className="text-secondary">Status: {event.reviewStatus}</p>
-                  <p className="text-secondary">Comment: {event.adminComment || "N/A"}</p>
-                  <p className="text-secondary">Reviewed At: {event.reviewedAt ? new Date(event.reviewedAt).toLocaleString() : "N/A"}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div>
-            <h2 className="mb-3 text-xl font-semibold text-primary">Reviewed Tickets</h2>
-            <div className="space-y-3">
-              {reviewedTickets.map((ticket) => (
-                <div key={ticket.id} className="surface-card p-4 text-sm">
-                  <p className="font-semibold text-primary">{ticket.user.name} • {ticket.event.name}</p>
-                  <p className="text-secondary">Status: {ticket.reviewStatus}</p>
-                  <p className="text-secondary">Comment: {ticket.adminComment || "N/A"}</p>
-                  <p className="text-secondary">Reviewed At: {ticket.reviewedAt ? new Date(ticket.reviewedAt).toLocaleString() : "N/A"}</p>
-                </div>
-              ))}
-            </div>
-          </div>
+        <div>
+          <h2 className="mb-4 text-xl font-semibold text-primary border-b pb-2">Review History & Audit Log</h2>
+          <AuditLog entries={auditLog} />
         </div>
       )}
 
       {activeView === "published-events" && (
         <div>
-          <h2 className="mb-3 text-xl font-semibold text-primary">Published Events</h2>
+          <h2 className="mb-4 text-xl font-semibold text-primary border-b pb-2">Published Events ({publishedEvents.length})</h2>
           <div className="space-y-3">
-            {publishedEvents.map((event) => (
-              <div key={event.id} className="surface-card p-4 text-sm">
-                <p className="font-semibold text-primary">{event.name}</p>
-                <p className="mt-1 text-secondary">{new Date(event.date).toLocaleString()} • {event.location}</p>
+            {publishedEvents.length > 0 ? (
+              publishedEvents.map((event) => (
+                <div key={event.id} className="surface-card p-4 text-sm border border-slate-200 rounded-lg">
+                  <p className="font-semibold text-primary">{event.name}</p>
+                  <p className="mt-1 text-secondary">📅 {new Date(event.date).toLocaleString()}</p>
+                  <p className="text-secondary">📍 {event.location}</p>
+                </div>
+              ))
+            ) : (
+              <div className="surface-card p-4 text-sm text-secondary text-center rounded-lg">
+                No published events
               </div>
-            ))}
+            )}
           </div>
         </div>
       )}
 
       {activeView === "cancelled-events" && (
         <div>
-          <h2 className="mb-3 text-xl font-semibold text-primary">Cancelled Events</h2>
+          <h2 className="mb-4 text-xl font-semibold text-primary border-b pb-2">Cancelled Events ({cancelledEvents.length})</h2>
           <div className="space-y-3">
-            {cancelledEvents.map((event) => (
-              <div key={event.id} className="surface-card p-4 text-sm">
-                <p className="font-semibold text-primary">{event.name}</p>
-                <p className="mt-1 text-secondary">{new Date(event.date).toLocaleString()} • {event.location}</p>
+            {cancelledEvents.length > 0 ? (
+              cancelledEvents.map((event) => (
+                <div key={event.id} className="surface-card p-4 text-sm border border-slate-200 rounded-lg">
+                  <p className="font-semibold text-primary">{event.name}</p>
+                  <p className="mt-1 text-secondary">📅 {new Date(event.date).toLocaleString()}</p>
+                </div>
+              ))
+            ) : (
+              <div className="surface-card p-4 text-sm text-secondary text-center rounded-lg">
+                No cancelled events
               </div>
-            ))}
+            )}
           </div>
         </div>
       )}
 
       {activeView === "deleted-events" && (
         <div>
-          <h2 className="mb-3 text-xl font-semibold text-primary">Deleted Events</h2>
+          <h2 className="mb-4 text-xl font-semibold text-primary border-b pb-2">Deleted Events ({deletedEvents.length})</h2>
           <div className="space-y-3">
-            {deletedEvents.map((event) => (
-              <div key={event.id} className="surface-card p-4 text-sm">
-                <p className="font-semibold text-primary">{event.name}</p>
-                <p className="mt-1 text-secondary">{new Date(event.createdAt).toLocaleString()}</p>
+            {deletedEvents.length > 0 ? (
+              deletedEvents.map((event) => (
+                <div key={event.id} className="surface-card p-4 text-sm border border-slate-200 rounded-lg">
+                  <p className="font-semibold text-primary">{event.name}</p>
+                  <p className="mt-1 text-secondary">🗑️ Deleted: {new Date(event.createdAt).toLocaleString()}</p>
+                </div>
+              ))
+            ) : (
+              <div className="surface-card p-4 text-sm text-secondary text-center rounded-lg">
+                No deleted events
               </div>
-            ))}
+            )}
           </div>
         </div>
       )}
