@@ -39,8 +39,8 @@ export function ApprovalMetrics({
   events,
   tickets,
 }: {
-  events: Array<{ reviewStatus: string; reviewedAt?: Date; createdAt: Date }>;
-  tickets: Array<{ reviewStatus: string; reviewedAt?: Date; createdAt: Date }>;
+  events: Array<{ reviewStatus: string; reviewedAt?: Date | null; createdAt: Date }>;
+  tickets: Array<{ reviewStatus: string; reviewedAt?: Date | null; createdAt: Date }>;
 }) {
   const allItems = [...events, ...tickets];
 
@@ -120,7 +120,7 @@ export function ApprovalMetrics({
 }
 
 function calculateAverageReviewTime(
-  items: Array<{ reviewStatus: string; reviewedAt?: Date; createdAt: Date }>
+  items: Array<{ reviewStatus: string; reviewedAt?: Date | null; createdAt: Date }>
 ): number {
   const reviewed = items.filter((i) => i.reviewStatus !== "PENDING" && i.reviewedAt);
 
