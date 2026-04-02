@@ -9,21 +9,54 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const ticket = await prisma.ticket.update({
-    where: { id: params.id },
-    data: { approved: true },
-    include: { user: true, event: true }
-  });
-
   try {
-    await sendTicketApprovedEmail({
-      to: ticket.user.email,
-      userName: ticket.user.name,
-      eventTitle: ticket.event.name
-    });
-  } catch (error) {
-    console.error("Failed to send payment verification email:", error);
-  }
+    const formData = await req.formData();
+    const adminComment = String(formData.get("adminComment") || "").trim();
 
-  return NextResponse.redirect(new URL("/admin?view=pending-tickets", req.url));
+    const ticket = await prisma.ticket.findUnique({
+      where: { id: params.id }
+    });
+
+    if (!ticket) {
+      return NextResponse.json({ error: "Ticket not found" }, { status: 404 });
+    }
+
+    if (ticket.reviewStatus !== "PENDING") {
+      return NextResponse.json(
+        { error: "This ticket has already been reviewed" },
+        { status: 400 }
+      );
+    }
+
+    const updatedTicket = await prisma.ticket.update({
+      where: { id: params.id },
+      data: {
+        reviewStatus: "APPROVED",
+        adminComment: adminComment || "Approved by admin",
+        reviewedAt: new Date()
+      },
+      include: { user: true, event: true }
+    });
+
+    try {
+      await sendTicketApprovedEmail({
+        to: updatedTicket.user.email,
+        userName: updatedTicket.user.name,
+        eventTitle: updatedTicket.event.name
+      });
+    } catch (emailError) {
+      console.error("Failed to send approval email:", emailError);
+    }
+
+    return NextResponse.json(
+      { success: true, message: "Ticket approved successfully" },
+      { status: 200 }
+    );
+  } catch (error) {
+    console.error("Ticket approval error:", error);
+    return NextResponse.json(
+      { error: "Failed to approve ticket" },
+      { status: 500 }
+    );
+  }
 }
