@@ -215,13 +215,17 @@ export default function AdminPage({
   };
 
   const eventCategories = [...new Set(events.map(e => e.category))];
+  
+  // Combine pending + reviewed items for comprehensive metrics
+  const allEventsForMetrics = [...events, ...reviewedEvents];
+  const allTicketsForMetrics = [...tickets, ...reviewedTickets];
 
   return (
     <section className="space-y-8">
       <h1 className="page-title">Admin Dashboard</h1>
 
       {/* Approval Metrics */}
-      <ApprovalMetrics events={events} tickets={tickets} />
+      <ApprovalMetrics events={allEventsForMetrics} tickets={allTicketsForMetrics} />
 
       <div className="grid gap-4 md:grid-cols-4">
         <div className="surface-card p-4 rounded-lg border border-slate-200">
