@@ -3,6 +3,7 @@ import type { Route } from "next";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { StepHeader } from "@/components/tickets/step-header";
+import { VoteButton } from "@/components/forms/vote-button";
 
 type EventSpotlightPageProps = {
   params: {
@@ -83,12 +84,16 @@ export default async function EventSpotlightPage({
               View Details
             </Link>
 
-            <Link
-              href={ticketDetailsHref}
-              className="inline-flex rounded-full bg-accent px-5 py-2 text-sm font-semibold text-white transition hover:bg-emerald-600"
-            >
-              Buy Tickets
-            </Link>
+            {event.ticketRequired ? (
+              <Link
+                href={ticketDetailsHref}
+                className="inline-flex rounded-full bg-accent px-5 py-2 text-sm font-semibold text-white transition hover:bg-emerald-600"
+              >
+                Buy Tickets
+              </Link>
+            ) : (
+              <VoteButton eventId={event.id} voteType="RSVP" label="RSVP Vote" />
+            )}
           </div>
         </div>
 
@@ -109,7 +114,6 @@ export default async function EventSpotlightPage({
     </div>
   );
 }
-
 
 
 

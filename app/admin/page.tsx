@@ -1,13 +1,8 @@
-﻿"use client";
-
-import { useEffect, useState } from "react";
-import { getSessionUser } from "@/lib/auth";
+import { getSessionUser } from "@/lib/server-auth";
 import Link from "next/link";
 import { AdminApprovalSection } from "@/components/admin-approval-section";
-import { useToast } from "@/components/toast";
 import { ApprovalMetrics } from "@/components/approval-metrics";
-import { AdvancedFilters } from "@/components/advanced-filters";
-import { AuditLog, AuditLogEntry } from "@/components/audit-log";
+import { prisma } from "@/lib/prisma";
 
 type AdminView =
   | "pending-events"
@@ -25,13 +20,6 @@ const VIEWS: Array<{ id: AdminView; label: string }> = [
   { id: "pending-tickets", label: "Pending Ticket Slips" },
   { id: "review-history", label: "Review History" }
 ];
-
-function parseTicketQuantity(notes: string | null | undefined): number {
-  if (!notes) return 1;
-  const match = notes.match(/quantity:(\d+)/i);
-  const parsed = match ? Number(match[1]) : NaN;
-  return Number.isInteger(parsed) && parsed > 0 ? parsed : 1;
-}
 
 async function loadAdminData() {
   let supportsEventReviewHistory = true;
@@ -280,19 +268,12 @@ export default async function AdminPage({
 
       {activeView === "pending-tickets" && (
         <div className="space-y-4">
-          <AdvancedFilters
-            onFilterChange={handleTicketFilterChange}
-            hasDateRange={true}
-          />
           <AdminApprovalSection
             type="tickets"
             title="Pending Ticket Slips"
-            items={filteredTickets}
-            emptyMessage={filteredTickets.length === 0 && tickets.length > 0 ? "No tickets match your filters" : "No pending ticket approvals"}
-            onItemsChange={(items) => {
-              setFilteredTickets(items as Ticket[]);
-              setTickets(items as Ticket[]);
-            }}
+            items={tickets as any}
+            emptyMessage="No pending ticket approvals"
+            onItemsChange={() => {}}
           />
         </div>
       )}

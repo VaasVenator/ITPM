@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { getSessionUser } from "@/lib/auth";
+import { getSessionUser } from "@/lib/server-auth";
 import { prisma } from "@/lib/prisma";
 
 function getEventState(event: {
