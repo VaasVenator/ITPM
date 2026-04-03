@@ -159,7 +159,6 @@ export default async function HomePage() {
       </div>
 
       <div className="space-y-2">
-        <p className="text-xs font-semibold uppercase tracking-[0.24em] text-accent">Campus Experiences</p>
         <h1 className="page-title">Upcoming Events</h1>
       </div>
 

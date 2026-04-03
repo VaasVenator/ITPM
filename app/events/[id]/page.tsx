@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { Route } from "next";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
+import { getSessionUser } from "@/lib/server-auth";
 import { StepHeader } from "@/components/tickets/step-header";
 import { VoteButton } from "@/components/forms/vote-button";
 
@@ -43,8 +44,13 @@ export default async function EventSpotlightPage({
   let reviewFeatureUnavailable = false;
 
   try {
+    const eventReviewModel = (prisma as { eventReview?: any }).eventReview;
+
+    if (!eventReviewModel) {
+      reviewFeatureUnavailable = true;
+    } else {
     [approvedReviews, myReview] = await Promise.all([
-      prisma.eventReview.findMany({
+      eventReviewModel.findMany({
         where: {
           eventId: event.id,
           moderationStatus: "APPROVED"
@@ -61,7 +67,7 @@ export default async function EventSpotlightPage({
         orderBy: { createdAt: "desc" }
       }),
       user
-        ? prisma.eventReview.findUnique({
+        ? eventReviewModel.findUnique({
             where: {
               eventId_userId: {
                 eventId: event.id,
@@ -71,6 +77,7 @@ export default async function EventSpotlightPage({
           })
         : Promise.resolve(null)
     ]);
+    }
   } catch (error) {
     const message = error instanceof Error ? error.message.toLowerCase() : "";
     if (message.includes("eventreview") || message.includes("does not exist") || message.includes("unknown argument")) {
@@ -292,9 +299,6 @@ export default async function EventSpotlightPage({
     </div>
   );
 }
-
-
-
 
 
 
