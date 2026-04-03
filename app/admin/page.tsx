@@ -1,3 +1,6 @@
+import { getSessionUser } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
+import ReviewReports, { type ReviewReportRow } from "@/components/admin/review-reports";
 import { getSessionUser } from "@/lib/server-auth";
 import Link from "next/link";
 import { AdminApprovalSection } from "@/components/admin-approval-section";
@@ -10,7 +13,11 @@ type AdminView =
   | "cancelled-events"
   | "deleted-events"
   | "pending-tickets"
+  | "pending-reviews"
+  | "review-reports"
   | "review-history";
+
+type ReviewCategory = "SPORTS" | "MUSICAL" | "WORKSHOPS" | "EXHIBITIONS" | "CULTURAL" | "RELIGIOUS";
 
 const VIEWS: Array<{ id: AdminView; label: string }> = [
   { id: "pending-events", label: "Pending Event Approvals" },
@@ -18,12 +25,15 @@ const VIEWS: Array<{ id: AdminView; label: string }> = [
   { id: "cancelled-events", label: "Cancelled Events" },
   { id: "deleted-events", label: "Deleted Events" },
   { id: "pending-tickets", label: "Pending Ticket Slips" },
+  { id: "pending-reviews", label: "Pending User Reviews" },
+  { id: "review-reports", label: "Review Reports" },
   { id: "review-history", label: "Review History" }
 ];
 
 async function loadAdminData() {
   let supportsEventReviewHistory = true;
   let supportsTicketReviewHistory = true;
+  let supportsUserReviewModeration = true;
 
   let events;
   let reviewedEvents;
@@ -87,6 +97,39 @@ async function loadAdminData() {
     ]);
   }
 
+  let pendingReviews;
+  let reviewedEventReviews;
+  try {
+    [pendingReviews, reviewedEventReviews] = await Promise.all([
+      prisma.eventReview.findMany({
+        where: { moderationStatus: "PENDING" },
+        include: { event: true, user: true },
+        orderBy: { createdAt: "desc" }
+      }),
+      prisma.eventReview.findMany({
+        where: { moderationStatus: { not: "PENDING" } },
+        include: { event: true, user: true },
+        orderBy: { moderatedAt: "desc" }
+      })
+    ]);
+  } catch (error) {
+    if (!(error instanceof Error)) {
+      throw error;
+    }
+
+    const lowerMessage = error.message.toLowerCase();
+    if (
+      !lowerMessage.includes("eventreview") &&
+      !lowerMessage.includes("does not exist") &&
+      !lowerMessage.includes("unknown argument")
+    ) {
+      throw error;
+    }
+
+    supportsUserReviewModeration = false;
+    [pendingReviews, reviewedEventReviews] = [[], []];
+  }
+
   const [publishedEvents, cancelledEvents, deletedEvents] = await Promise.all([
     prisma.event.findMany({
       where: { approved: true, published: true, deleted: false },
@@ -113,7 +156,10 @@ async function loadAdminData() {
     deletedEvents,
     reviewedEvents,
     reviewedTickets,
-    supportsReviewHistory: supportsEventReviewHistory && supportsTicketReviewHistory
+    pendingReviews,
+    reviewedEventReviews,
+    supportsReviewHistory:
+      supportsEventReviewHistory && supportsTicketReviewHistory && supportsUserReviewModeration
   };
 }
 
@@ -140,13 +186,21 @@ export default async function AdminPage({
     deletedEvents,
     reviewedEvents,
     reviewedTickets,
+    pendingReviews,
+    reviewedEventReviews,
     supportsReviewHistory
   } = await loadAdminData();
+
+  const reviewReportRows: ReviewReportRow[] = [...pendingReviews, ...reviewedEventReviews]
+    .map(toReviewReportRow)
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 
   return (
     <section className="space-y-8">
       <h1 className="page-title">Admin Dashboard</h1>
 
+      <div className="grid gap-4 md:grid-cols-5">
+        <div className="surface-card p-4">
       {/* Approval Metrics */}
       <ApprovalMetrics events={events} tickets={tickets} />
 
@@ -166,7 +220,7 @@ export default async function AdminPage({
         <div className="surface-card p-4 rounded-lg border border-slate-200">
           <p className="text-xs font-semibold uppercase text-secondary">Reviewed Items</p>
           <p className="mt-2 text-2xl font-bold text-primary">
-            {reviewedEvents.length + reviewedTickets.length}
+            {reviewedEvents.length + reviewedTickets.length + reviewedEventReviews.length}
           </p>
         </div>
       </div>
@@ -278,6 +332,76 @@ export default async function AdminPage({
         </div>
       )}
 
+      {activeView === "pending-reviews" && (
+        <div>
+          <h2 className="mb-3 text-xl font-semibold text-primary">Pending User Reviews</h2>
+          <div className="space-y-3">
+            {pendingReviews.map((review) => (
+              <div key={review.id} className="surface-card p-4 text-sm">
+                <p className="font-semibold text-primary">{review.event.name}</p>
+                <p className="mt-1 text-secondary">Submitted by: {review.user.name}</p>
+                <p className="text-secondary">Rating: {review.rating}/5</p>
+                <p className="text-secondary">Anonymous: {review.anonymous ? "Yes" : "No"}</p>
+                <p className="mt-2 text-secondary">Review: {review.comment}</p>
+                <p className="mt-1 text-secondary">
+                  Submitted At: {new Date(review.createdAt).toLocaleString()}
+                </p>
+
+                <div className="mt-4 grid gap-3 md:grid-cols-2">
+                  <form
+                    action={`/api/admin/reviews/${review.id}/approve`}
+                    method="post"
+                    className="space-y-2 rounded-xl border border-slate-200 p-3"
+                  >
+                    <label className="block text-xs font-semibold text-secondary">Approval Comment</label>
+                    <textarea
+                      name="adminComment"
+                      rows={3}
+                      className="w-full rounded-lg border border-slate-300 p-2"
+                      placeholder="Optional approval note"
+                    />
+                    <button className="rounded-lg bg-accent px-3 py-2 font-semibold text-white transition hover:bg-brand-dark">
+                      Approve Review
+                    </button>
+                  </form>
+
+                  <form
+                    action={`/api/admin/reviews/${review.id}/reject`}
+                    method="post"
+                    className="space-y-2 rounded-xl border border-slate-200 p-3"
+                  >
+                    <label className="block text-xs font-semibold text-secondary">Rejection Reason</label>
+                    <textarea
+                      name="adminComment"
+                      rows={3}
+                      className="w-full rounded-lg border border-slate-300 p-2"
+                      placeholder="Reason is required"
+                      required
+                    />
+                    <button className="rounded-lg bg-primary px-3 py-2 font-semibold text-white transition hover:bg-slate-800">
+                      Reject Review
+                    </button>
+                  </form>
+                </div>
+              </div>
+            ))}
+            {pendingReviews.length === 0 ? (
+              <p className="surface-card p-4 text-sm text-secondary">No pending user reviews.</p>
+            ) : null}
+          </div>
+        </div>
+      )}
+
+      {activeView === "review-reports" && (
+        supportsReviewHistory ? (
+          <ReviewReports reviews={reviewReportRows} />
+        ) : (
+          <p className="surface-card p-4 text-sm text-secondary">
+            Review reports are not available yet because this database is still using the older admin approval schema.
+          </p>
+        )
+      )}
+
       {activeView === "review-history" && (
         <div className="space-y-6">
           {!supportsReviewHistory ? (
@@ -312,6 +436,28 @@ export default async function AdminPage({
                   <p className="text-secondary">Reviewed At: {ticket.reviewedAt ? new Date(ticket.reviewedAt).toLocaleString() : "N/A"}</p>
                 </div>
               ))}
+            </div>
+          </div>
+
+          <div>
+            <h2 className="mb-3 text-xl font-semibold text-primary">Reviewed User Reviews</h2>
+            <div className="space-y-3">
+              {reviewedEventReviews.map((review) => (
+                <div key={review.id} className="surface-card p-4 text-sm">
+                  <p className="font-semibold text-primary">{review.event.name}</p>
+                  <p className="text-secondary">Submitted by: {review.user.name}</p>
+                  <p className="text-secondary">Rating: {review.rating}/5</p>
+                  <p className="text-secondary">Status: {review.moderationStatus}</p>
+                  <p className="text-secondary">Review: {review.comment}</p>
+                  <p className="text-secondary">Admin Comment: {review.adminComment || "N/A"}</p>
+                  <p className="text-secondary">
+                    Reviewed At: {review.moderatedAt ? new Date(review.moderatedAt).toLocaleString() : "N/A"}
+                  </p>
+                </div>
+              ))}
+              {reviewedEventReviews.length === 0 ? (
+                <p className="surface-card p-4 text-sm text-secondary">No reviewed user reviews yet.</p>
+              ) : null}
             </div>
           </div>
         </div>
