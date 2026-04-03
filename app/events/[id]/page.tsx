@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { Route } from "next";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
+import { getSessionUser } from "@/lib/server-auth";
 import { StepHeader } from "@/components/tickets/step-header";
 import { VoteButton } from "@/components/forms/vote-button";
 
