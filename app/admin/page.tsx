@@ -1,7 +1,11 @@
 import { getSessionUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import ReviewReports, { type ReviewReportRow } from "@/components/admin/review-reports";
+import { getSessionUser } from "@/lib/server-auth";
 import Link from "next/link";
+import { AdminApprovalSection } from "@/components/admin-approval-section";
+import { ApprovalMetrics } from "@/components/approval-metrics";
+import { prisma } from "@/lib/prisma";
 
 type AdminView =
   | "pending-events"
@@ -25,43 +29,6 @@ const VIEWS: Array<{ id: AdminView; label: string }> = [
   { id: "review-reports", label: "Review Reports" },
   { id: "review-history", label: "Review History" }
 ];
-
-function parseTicketQuantity(notes: string | null): number {
-  if (!notes) return 1;
-  const match = notes.match(/quantity:(\d+)/i);
-  const parsed = match ? Number(match[1]) : NaN;
-  return Number.isInteger(parsed) && parsed > 0 ? parsed : 1;
-}
-
-function toReviewReportRow(review: {
-  id: string;
-  eventId: string;
-  event: { name: string; category: ReviewCategory };
-  user: { id: string; name: string };
-  rating: number;
-  comment: string;
-  anonymous: boolean;
-  moderationStatus: "PENDING" | "APPROVED" | "REJECTED";
-  adminComment: string | null;
-  createdAt: Date;
-  moderatedAt: Date | null;
-}): ReviewReportRow {
-  return {
-    id: review.id,
-    eventId: review.eventId,
-    eventName: review.event.name,
-    eventCategory: review.event.category,
-    userName: review.user.name,
-    userId: review.user.id,
-    rating: review.rating,
-    comment: review.comment,
-    anonymous: review.anonymous,
-    moderationStatus: review.moderationStatus,
-    adminComment: review.adminComment,
-    createdAt: review.createdAt.toISOString(),
-    moderatedAt: review.moderatedAt ? review.moderatedAt.toISOString() : null
-  };
-}
 
 async function loadAdminData() {
   let supportsEventReviewHistory = true;
@@ -234,22 +201,23 @@ export default async function AdminPage({
 
       <div className="grid gap-4 md:grid-cols-5">
         <div className="surface-card p-4">
+      {/* Approval Metrics */}
+      <ApprovalMetrics events={events} tickets={tickets} />
+
+      <div className="grid gap-4 md:grid-cols-4">
+        <div className="surface-card p-4 rounded-lg border border-slate-200">
           <p className="text-xs font-semibold uppercase text-secondary">Pending Events</p>
           <p className="mt-2 text-2xl font-bold text-primary">{events.length}</p>
         </div>
-        <div className="surface-card p-4">
+        <div className="surface-card p-4 rounded-lg border border-slate-200">
           <p className="text-xs font-semibold uppercase text-secondary">Pending Tickets</p>
           <p className="mt-2 text-2xl font-bold text-primary">{tickets.length}</p>
         </div>
-        <div className="surface-card p-4">
+        <div className="surface-card p-4 rounded-lg border border-slate-200">
           <p className="text-xs font-semibold uppercase text-secondary">Published Events</p>
           <p className="mt-2 text-2xl font-bold text-primary">{publishedEvents.length}</p>
         </div>
-        <div className="surface-card p-4">
-          <p className="text-xs font-semibold uppercase text-secondary">Pending Reviews</p>
-          <p className="mt-2 text-2xl font-bold text-primary">{pendingReviews.length}</p>
-        </div>
-        <div className="surface-card p-4">
+        <div className="surface-card p-4 rounded-lg border border-slate-200">
           <p className="text-xs font-semibold uppercase text-secondary">Reviewed Items</p>
           <p className="mt-2 text-2xl font-bold text-primary">
             {reviewedEvents.length + reviewedTickets.length + reviewedEventReviews.length}
@@ -257,15 +225,15 @@ export default async function AdminPage({
         </div>
       </div>
 
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap gap-2 pb-4 border-b border-slate-200">
         {VIEWS.map((view) => (
           <Link
             key={view.id}
             href={`/admin?view=${view.id}`}
             className={
               activeView === view.id
-                ? "rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-white"
-                : "rounded-lg bg-highlight px-3 py-2 text-sm font-semibold text-primary transition hover:bg-emerald-100"
+                ? "rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow-md transition"
+                : "rounded-lg bg-slate-100 px-4 py-2 text-sm font-semibold text-primary transition hover:bg-slate-200"
             }
           >
             {view.label}
@@ -353,60 +321,14 @@ export default async function AdminPage({
       )}
 
       {activeView === "pending-tickets" && (
-        <div>
-          <h2 className="mb-3 text-xl font-semibold text-primary">Pending Ticket Slips</h2>
-          <div className="space-y-3">
-            {tickets.map((ticket) => (
-              <div key={ticket.id} className="surface-card p-4 text-sm">
-                <p className="font-semibold text-primary">{ticket.user.name} • {ticket.event.name}</p>
-                <p className="mt-1 text-secondary">Quantity: {parseTicketQuantity(ticket.notes)}</p>
-                <p className="text-secondary">Amount per ticket: LKR {Number(ticket.price).toFixed(2)}</p>
-                <p className="text-secondary">
-                  Total amount: LKR {(Number(ticket.price) * parseTicketQuantity(ticket.notes)).toFixed(2)}
-                </p>
-
-                {ticket.paymentSlip.startsWith("data:image/") ? (
-                  <img
-                    src={ticket.paymentSlip}
-                    alt={`Bank slip for ${ticket.user.name}`}
-                    className="mt-2 h-56 w-full rounded-xl border border-slate-200 object-contain bg-white"
-                  />
-                ) : (
-                  <p className="mt-1 break-all text-secondary">Slip: {ticket.paymentSlip}</p>
-                )}
-
-                <div className="mt-4 grid gap-3 md:grid-cols-2">
-                  <form action={`/api/admin/tickets/${ticket.id}/approve`} method="post" className="space-y-2 rounded-xl border border-slate-200 p-3">
-                    <label className="block text-xs font-semibold text-secondary">Approval Comment</label>
-                    <textarea
-                      name="adminComment"
-                      rows={3}
-                      className="w-full rounded-lg border border-slate-300 p-2"
-                      placeholder="Optional approval note"
-                    />
-                    <button className="rounded-lg bg-accent px-3 py-2 font-semibold text-white transition hover:bg-brand-dark">
-                      Approve Ticket Slip
-                    </button>
-                  </form>
-
-                  <form action={`/api/admin/tickets/${ticket.id}/reject`} method="post" className="space-y-2 rounded-xl border border-slate-200 p-3">
-                    <label className="block text-xs font-semibold text-secondary">Rejection Reason</label>
-                    <textarea
-                      name="adminComment"
-                      rows={3}
-                      className="w-full rounded-lg border border-slate-300 p-2"
-                      placeholder="Reason is required"
-                      required
-                    />
-                    <button className="rounded-lg bg-primary px-3 py-2 font-semibold text-white transition hover:bg-slate-800">
-                      Reject Ticket Slip
-                    </button>
-                  </form>
-                </div>
-              </div>
-            ))}
-            {tickets.length === 0 ? <p className="surface-card p-4 text-sm text-secondary">No pending ticket approvals.</p> : null}
-          </div>
+        <div className="space-y-4">
+          <AdminApprovalSection
+            type="tickets"
+            title="Pending Ticket Slips"
+            items={tickets as any}
+            emptyMessage="No pending ticket approvals"
+            onItemsChange={() => {}}
+          />
         </div>
       )}
 
@@ -543,42 +465,61 @@ export default async function AdminPage({
 
       {activeView === "published-events" && (
         <div>
-          <h2 className="mb-3 text-xl font-semibold text-primary">Published Events</h2>
+          <h2 className="mb-4 text-xl font-semibold text-primary border-b pb-2">Published Events ({publishedEvents.length})</h2>
           <div className="space-y-3">
-            {publishedEvents.map((event) => (
-              <div key={event.id} className="surface-card p-4 text-sm">
-                <p className="font-semibold text-primary">{event.name}</p>
-                <p className="mt-1 text-secondary">{new Date(event.date).toLocaleString()} • {event.location}</p>
+            {publishedEvents.length > 0 ? (
+              publishedEvents.map((event) => (
+                <div key={event.id} className="surface-card p-4 text-sm border border-slate-200 rounded-lg">
+                  <p className="font-semibold text-primary">{event.name}</p>
+                  <p className="mt-1 text-secondary">📅 {new Date(event.date).toLocaleString()}</p>
+                  <p className="text-secondary">📍 {event.location}</p>
+                </div>
+              ))
+            ) : (
+              <div className="surface-card p-4 text-sm text-secondary text-center rounded-lg">
+                No published events
               </div>
-            ))}
+            )}
           </div>
         </div>
       )}
 
       {activeView === "cancelled-events" && (
         <div>
-          <h2 className="mb-3 text-xl font-semibold text-primary">Cancelled Events</h2>
+          <h2 className="mb-4 text-xl font-semibold text-primary border-b pb-2">Cancelled Events ({cancelledEvents.length})</h2>
           <div className="space-y-3">
-            {cancelledEvents.map((event) => (
-              <div key={event.id} className="surface-card p-4 text-sm">
-                <p className="font-semibold text-primary">{event.name}</p>
-                <p className="mt-1 text-secondary">{new Date(event.date).toLocaleString()} • {event.location}</p>
+            {cancelledEvents.length > 0 ? (
+              cancelledEvents.map((event) => (
+                <div key={event.id} className="surface-card p-4 text-sm border border-slate-200 rounded-lg">
+                  <p className="font-semibold text-primary">{event.name}</p>
+                  <p className="mt-1 text-secondary">📅 {new Date(event.date).toLocaleString()}</p>
+                </div>
+              ))
+            ) : (
+              <div className="surface-card p-4 text-sm text-secondary text-center rounded-lg">
+                No cancelled events
               </div>
-            ))}
+            )}
           </div>
         </div>
       )}
 
       {activeView === "deleted-events" && (
         <div>
-          <h2 className="mb-3 text-xl font-semibold text-primary">Deleted Events</h2>
+          <h2 className="mb-4 text-xl font-semibold text-primary border-b pb-2">Deleted Events ({deletedEvents.length})</h2>
           <div className="space-y-3">
-            {deletedEvents.map((event) => (
-              <div key={event.id} className="surface-card p-4 text-sm">
-                <p className="font-semibold text-primary">{event.name}</p>
-                <p className="mt-1 text-secondary">{new Date(event.createdAt).toLocaleString()}</p>
+            {deletedEvents.length > 0 ? (
+              deletedEvents.map((event) => (
+                <div key={event.id} className="surface-card p-4 text-sm border border-slate-200 rounded-lg">
+                  <p className="font-semibold text-primary">{event.name}</p>
+                  <p className="mt-1 text-secondary">🗑️ Deleted: {new Date(event.createdAt).toLocaleString()}</p>
+                </div>
+              ))
+            ) : (
+              <div className="surface-card p-4 text-sm text-secondary text-center rounded-lg">
+                No deleted events
               </div>
-            ))}
+            )}
           </div>
         </div>
       )}
