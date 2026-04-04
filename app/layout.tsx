@@ -1,6 +1,6 @@
 import "./globals.css";
 import Link from "next/link";
-import { getSessionUser } from "@/lib/auth";
+import { getSessionUser } from "@/lib/server-auth";
 import { LogoutButton } from "@/components/ui/logout-button";
 import { ToastProvider } from "@/components/toast";
 import { prisma } from "@/lib/prisma";

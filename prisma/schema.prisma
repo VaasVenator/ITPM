@@ -28,6 +28,12 @@ enum SponsorType {
   PARTNER
 }
 
+enum ModerationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
 model User {
   id             String   @id @default(cuid())
   name           String
@@ -47,6 +53,10 @@ model User {
   tickets         Ticket[]
   votes           Vote[]
   refundRequests  RefundRequest[]
+  eventsCreated  Event[]
+  tickets        Ticket[]
+  votes          Vote[]
+  eventReviews   EventReview[]
 }
 
 model Event {
@@ -77,6 +87,29 @@ model Event {
   tickets           Ticket[]
   sponsors          Sponsor[]
   votes             Vote[]
+  reviews           EventReview[]
+}
+
+model EventReview {
+  id               String           @id @default(cuid())
+  eventId          String
+  userId           String
+  rating           Int
+  comment          String
+  anonymous        Boolean          @default(false)
+  moderationStatus ModerationStatus @default(PENDING)
+  adminComment     String?
+  moderatedAt      DateTime?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  event            Event            @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user             User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, userId])
+  @@index([eventId])
+  @@index([moderationStatus])
+  @@index([createdAt])
 }
 
 model Ticket {

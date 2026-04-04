@@ -27,6 +27,21 @@ Tech stack: Next.js App Router, TypeScript, Tailwind CSS, Prisma ORM, PostgreSQL
    npm run dev
    ```
 
+## Database safety (important)
+
+- Do not run `prisma db push --accept-data-loss` on a shared or production database.
+- `--accept-data-loss` explicitly allows Prisma to drop/replace schema parts, which can delete existing rows.
+- For normal schema changes, prefer migrations:
+   ```bash
+   npm run prisma:migrate -- --name your_change_name
+   npm run prisma:generate
+   ```
+- For deployment, use:
+   ```bash
+   npx prisma migrate deploy
+   ```
+- Use `npm run prisma:push` only when you understand the impact and do not include `--accept-data-loss` unless you are intentionally resetting data.
+
 ## Core features scaffolded
 
 - Auth with JWT cookie (`/api/auth/signup`, `/api/auth/login`)
