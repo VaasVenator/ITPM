@@ -35,6 +35,12 @@ type RefundRequest = {
   };
 };
 
+type MetricReviewItem = {
+  createdAt: Date;
+  reviewStatus: string;
+  reviewedAt: Date | null;
+};
+
 const VIEWS: Array<{ id: AdminView; label: string }> = [
   { id: "pending-events", label: "Pending Event Approvals" },
   { id: "published-events", label: "Published Events" },
@@ -50,17 +56,6 @@ function parseTicketQuantity(notes: string | null): number {
   const match = notes.match(/quantity:(\d+)/i);
   const parsed = match ? Number(match[1]) : NaN;
   return Number.isInteger(parsed) && parsed > 0 ? parsed : 1;
-}
-
-function toMetricItem<T extends { createdAt: Date }>(item: T): T & { reviewStatus: string; reviewedAt: Date | null } {
-  const maybeReviewStatus = (item as { reviewStatus?: string }).reviewStatus;
-  const maybeReviewedAt = (item as { reviewedAt?: Date | null }).reviewedAt;
-
-  return {
-    ...item,
-    reviewStatus: maybeReviewStatus ?? "PENDING",
-    reviewedAt: maybeReviewedAt ?? null
-  };
 }
 
 async function loadAdminData(activeView: AdminView) {
@@ -84,8 +79,16 @@ async function loadAdminData(activeView: AdminView) {
   const deletedEvents: any[] = [];
   const refunds: RefundRequest[] = [];
   const reviewedRefunds: RefundRequest[] = [];
+  let metricEvents: MetricReviewItem[] = [];
+  let metricTickets: MetricReviewItem[] = [];
 
   try {
+    metricEvents = (await prisma.event.findMany({
+      where: { deleted: false },
+      select: { createdAt: true, reviewStatus: true, reviewedAt: true } as any,
+      orderBy: { createdAt: "desc" }
+    })) as unknown as MetricReviewItem[];
+
     pendingEventCount = await prisma.event.count({
       where: { deleted: false, reviewStatus: "PENDING" } as any
     });
@@ -119,6 +122,18 @@ async function loadAdminData(activeView: AdminView) {
     }
 
     supportsEventReviewHistory = false;
+    metricEvents = (
+      await prisma.event.findMany({
+        where: { deleted: false },
+        select: { createdAt: true, approved: true },
+        orderBy: { createdAt: "desc" }
+      })
+    ).map((event) => ({
+      createdAt: event.createdAt,
+      reviewStatus: event.approved ? "APPROVED" : "PENDING",
+      reviewedAt: null
+    }));
+
     pendingEventCount = await prisma.event.count({
       where: { deleted: false, approved: false }
     });
@@ -135,6 +150,11 @@ async function loadAdminData(activeView: AdminView) {
   }
 
   try {
+    metricTickets = (await prisma.ticket.findMany({
+      select: { createdAt: true, reviewStatus: true, reviewedAt: true } as any,
+      orderBy: { createdAt: "desc" }
+    })) as unknown as MetricReviewItem[];
+
     pendingTicketCount = await prisma.ticket.count({
       where: { reviewStatus: "PENDING" } as any
     });
@@ -168,6 +188,17 @@ async function loadAdminData(activeView: AdminView) {
     }
 
     supportsTicketReviewHistory = false;
+    metricTickets = (
+      await prisma.ticket.findMany({
+        select: { createdAt: true, approved: true },
+        orderBy: { createdAt: "desc" }
+      })
+    ).map((ticket) => ({
+      createdAt: ticket.createdAt,
+      reviewStatus: ticket.approved ? "APPROVED" : "PENDING",
+      reviewedAt: null
+    }));
+
     pendingTicketCount = await prisma.ticket.count({
       where: { approved: false }
     });
@@ -263,6 +294,8 @@ async function loadAdminData(activeView: AdminView) {
     reviewedTickets,
     refunds,
     reviewedRefunds,
+    metricEvents,
+    metricTickets,
     publishedEvents,
     cancelledEvents,
     deletedEvents,
@@ -326,6 +359,8 @@ export default async function AdminPage({
     reviewedTickets,
     refunds,
     reviewedRefunds,
+    metricEvents,
+    metricTickets,
     publishedEvents,
     cancelledEvents,
     deletedEvents,
@@ -333,8 +368,8 @@ export default async function AdminPage({
     supportsReviewHistory
   } = data;
 
-  const allEventsForMetrics = [...events, ...reviewedEvents].map(toMetricItem);
-  const allTicketsForMetrics = [...tickets, ...reviewedTickets].map(toMetricItem);
+  const allEventsForMetrics = metricEvents;
+  const allTicketsForMetrics = metricTickets;
   const totalReviewedItems = reviewedEventCount + reviewedTicketCount + reviewedRefundCount;
 
   return (
@@ -342,29 +377,6 @@ export default async function AdminPage({
       <h1 className="page-title">Admin Dashboard</h1>
 
       <ApprovalMetrics events={allEventsForMetrics} tickets={allTicketsForMetrics} />
-
-      <div className="grid gap-4 md:grid-cols-5">
-        <div className="surface-card rounded-lg border border-slate-200 p-4">
-          <p className="text-xs font-semibold uppercase text-secondary">Pending Events</p>
-          <p className="mt-2 text-2xl font-bold text-primary">{pendingEventCount}</p>
-        </div>
-        <div className="surface-card rounded-lg border border-slate-200 p-4">
-          <p className="text-xs font-semibold uppercase text-secondary">Pending Tickets</p>
-          <p className="mt-2 text-2xl font-bold text-primary">{pendingTicketCount}</p>
-        </div>
-        <div className="surface-card rounded-lg border border-slate-200 p-4">
-          <p className="text-xs font-semibold uppercase text-secondary">Pending Refunds</p>
-          <p className="mt-2 text-2xl font-bold text-primary">{pendingRefundCount}</p>
-        </div>
-        <div className="surface-card rounded-lg border border-slate-200 p-4">
-          <p className="text-xs font-semibold uppercase text-secondary">Published Events</p>
-          <p className="mt-2 text-2xl font-bold text-primary">{publishedEventCount}</p>
-        </div>
-        <div className="surface-card rounded-lg border border-slate-200 p-4">
-          <p className="text-xs font-semibold uppercase text-secondary">Reviewed Items</p>
-          <p className="mt-2 text-2xl font-bold text-primary">{totalReviewedItems}</p>
-        </div>
-      </div>
 
       <div className="flex flex-wrap gap-2">
         {VIEWS.map((view) => (
