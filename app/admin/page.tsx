@@ -15,6 +15,7 @@ type AdminView =
   | "cancelled-events"
   | "deleted-events"
   | "pending-tickets"
+  | "pending-refunds"
   | "review-history";
 
 const VIEWS: Array<{ id: AdminView; label: string }> = [
@@ -23,6 +24,7 @@ const VIEWS: Array<{ id: AdminView; label: string }> = [
   { id: "cancelled-events", label: "Cancelled Events" },
   { id: "deleted-events", label: "Deleted Events" },
   { id: "pending-tickets", label: "Pending Ticket Slips" },
+  { id: "pending-refunds", label: "Pending Refunds" },
   { id: "review-history", label: "Review History" }
 ];
 
@@ -73,6 +75,28 @@ interface Ticket {
   reviewedAt?: Date;
 }
 
+interface RefundRequest {
+  id: string;
+  amount: number;
+  reason: string;
+  status: string;
+  createdAt: Date;
+  reviewedAt?: Date;
+  user: {
+    id: string;
+    name: string;
+    email: string;
+  };
+  ticket: {
+    id: string;
+    event: {
+      id: string;
+      name: string;
+    };
+  };
+  adminComment?: string;
+}
+
 export default function AdminPage({
   searchParams
 }: {
@@ -82,14 +106,17 @@ export default function AdminPage({
   const [isLoading, setIsLoading] = useState(true);
   const [events, setEvents] = useState<Event[]>([]);
   const [tickets, setTickets] = useState<Ticket[]>([]);
+  const [refunds, setRefunds] = useState<RefundRequest[]>([]);
   const [publishedEvents, setPublishedEvents] = useState<Event[]>([]);
   const [cancelledEvents, setCancelledEvents] = useState<Event[]>([]);
   const [deletedEvents, setDeletedEvents] = useState<Event[]>([]);
   const [reviewedEvents, setReviewedEvents] = useState<Event[]>([]);
   const [reviewedTickets, setReviewedTickets] = useState<Ticket[]>([]);
+  const [reviewedRefunds, setReviewedRefunds] = useState<RefundRequest[]>([]);
   const { addToast } = useToast();
   const [filteredEvents, setFilteredEvents] = useState<Event[]>([]);
   const [filteredTickets, setFilteredTickets] = useState<Ticket[]>([]);
+  const [filteredRefunds, setFilteredRefunds] = useState<RefundRequest[]>([]);
   const [auditLog, setAuditLog] = useState<AuditLogEntry[]>([]);
 
   const activeView: AdminView = VIEWS.some((v) => v.id === searchParams?.view)
@@ -133,6 +160,14 @@ export default function AdminPage({
       setDeletedEvents(data.deletedEvents);
       setReviewedEvents(data.reviewedEvents);
       setReviewedTickets(data.reviewedTickets);
+
+      // Fetch refund requests
+      const refundRes = await fetch("/api/admin/refunds");
+      if (refundRes.ok) {
+        const refundData = await refundRes.json();
+        setRefunds(refundData.refunds || []);
+        setFilteredRefunds(refundData.refunds || []);
+      }
 
       // Build audit log from reviewed items
       const auditEntries: AuditLogEntry[] = [];
@@ -227,7 +262,7 @@ export default function AdminPage({
       {/* Approval Metrics */}
       <ApprovalMetrics events={allEventsForMetrics} tickets={allTicketsForMetrics} />
 
-      <div className="grid gap-4 md:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-5">
         <div className="surface-card p-4 rounded-lg border border-slate-200">
           <p className="text-xs font-semibold uppercase text-secondary">Pending Events</p>
           <p className="mt-2 text-2xl font-bold text-primary">{events.length}</p>
@@ -237,13 +272,17 @@ export default function AdminPage({
           <p className="mt-2 text-2xl font-bold text-primary">{tickets.length}</p>
         </div>
         <div className="surface-card p-4 rounded-lg border border-slate-200">
+          <p className="text-xs font-semibold uppercase text-secondary">Pending Refunds</p>
+          <p className="mt-2 text-2xl font-bold text-primary">{refunds.length}</p>
+        </div>
+        <div className="surface-card p-4 rounded-lg border border-slate-200">
           <p className="text-xs font-semibold uppercase text-secondary">Published Events</p>
           <p className="mt-2 text-2xl font-bold text-primary">{publishedEvents.length}</p>
         </div>
         <div className="surface-card p-4 rounded-lg border border-slate-200">
           <p className="text-xs font-semibold uppercase text-secondary">Reviewed Items</p>
           <p className="mt-2 text-2xl font-bold text-primary">
-            {reviewedEvents.length + reviewedTickets.length}
+            {reviewedEvents.length + reviewedTickets.length + reviewedRefunds.length}
           </p>
         </div>
       </div>
@@ -300,6 +339,97 @@ export default function AdminPage({
               setTickets(items as Ticket[]);
             }}
           />
+        </div>
+      )}
+
+      {activeView === "pending-refunds" && (
+        <div className="space-y-4">
+          <h2 className="mb-4 text-xl font-semibold text-primary border-b pb-2">Pending Refund Requests ({filteredRefunds.length})</h2>
+          <div className="space-y-3">
+            {filteredRefunds.length > 0 ? (
+              filteredRefunds.map((refund) => (
+                <div key={refund.id} className="surface-card p-4 border border-slate-200 rounded-lg">
+                  <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
+                    <div className="flex-1">
+                      <p className="font-semibold text-primary">{refund.user.name}</p>
+                      <p className="text-sm text-secondary mt-1">📌 {refund.ticket.event.name}</p>
+                      <p className="text-sm text-secondary">Reason: {refund.reason}</p>
+                      <p className="font-semibold text-lg text-primary mt-2">Amount: ${parseFloat(String(refund.amount)).toFixed(2)}</p>
+                      <p className="text-xs text-secondary mt-1">Requested: {new Date(refund.createdAt).toLocaleString()}</p>
+                    </div>
+                    <div className="flex flex-col gap-2 md:flex-row">
+                      <form
+                        action={`/api/admin/refunds/${refund.id}/approve`}
+                        method="POST"
+                        onSubmit={async (e) => {
+                          e.preventDefault();
+                          const formData = new FormData(e.currentTarget);
+                          try {
+                            const res = await fetch(`/api/admin/refunds/${refund.id}/approve`, {
+                              method: "POST",
+                              body: formData
+                            });
+                            if (res.ok) {
+                              addToast("Refund approved successfully", "success");
+                              setRefunds(refunds.filter(r => r.id !== refund.id));
+                              setFilteredRefunds(filteredRefunds.filter(r => r.id !== refund.id));
+                            } else {
+                              addToast("Failed to approve refund", "error");
+                            }
+                          } catch (error) {
+                            addToast("Error approving refund", "error");
+                          }
+                        }}
+                        className="flex flex-col gap-2"
+                      >
+                        <input
+                          type="hidden"
+                          name="adminComment"
+                          value="Approved by admin"
+                        />
+                        <button
+                          type="submit"
+                          className="px-4 py-2 text-sm font-semibold text-white bg-green-600 rounded-lg hover:bg-green-700 transition"
+                        >
+                          ✓ Approve
+                        </button>
+                      </form>
+                      <button
+                        onClick={() => {
+                          const comment = prompt("Enter rejection reason:");
+                          if (comment) {
+                            const form = new FormData();
+                            form.append("adminComment", comment);
+                            fetch(`/api/admin/refunds/${refund.id}/reject`, {
+                              method: "POST",
+                              body: form
+                            })
+                              .then(res => {
+                                if (res.ok) {
+                                  addToast("Refund rejected successfully", "success");
+                                  setRefunds(refunds.filter(r => r.id !== refund.id));
+                                  setFilteredRefunds(filteredRefunds.filter(r => r.id !== refund.id));
+                                } else {
+                                  addToast("Failed to reject refund", "error");
+                                }
+                              })
+                              .catch(() => addToast("Error rejecting refund", "error"));
+                          }
+                        }}
+                        className="px-4 py-2 text-sm font-semibold text-white bg-red-600 rounded-lg hover:bg-red-700 transition"
+                      >
+                        ✗ Reject
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="surface-card p-4 text-sm text-secondary text-center rounded-lg">
+                No pending refund requests
+              </div>
+            )}
+          </div>
         </div>
       )}
 

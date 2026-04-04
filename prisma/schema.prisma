@@ -43,9 +43,10 @@ model User {
   resetToken         String?
   resetTokenExpiry   DateTime?
 
-  eventsCreated  Event[]
-  tickets        Ticket[]
-  votes          Vote[]
+  eventsCreated   Event[]
+  tickets         Ticket[]
+  votes           Vote[]
+  refundRequests  RefundRequest[]
 }
 
 model Event {
@@ -93,8 +94,9 @@ model Ticket {
 
   createdAt       DateTime @default(now())
 
-  event           Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  event            Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  refundRequests   RefundRequest[]
 
   @@index([eventId])
   @@index([userId])
@@ -125,4 +127,23 @@ model Vote {
 
   @@unique([userId, eventId, voteType])
   @@index([eventId])
+}
+
+model RefundRequest {
+  id              String   @id @default(cuid())
+  ticketId        String
+  userId          String
+  amount          Decimal  @db.Decimal(10, 2)
+  reason          String
+  status          String   @default("PENDING")
+  adminComment    String?
+  reviewedAt      DateTime?
+  createdAt       DateTime @default(now())
+
+  ticket          Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([ticketId])
+  @@index([userId])
+  @@index([status])
 }
