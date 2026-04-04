@@ -1,11 +1,10 @@
-import { getSessionUser } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
 import ReviewReports, { type ReviewReportRow } from "@/components/admin/review-reports";
 import { getSessionUser } from "@/lib/server-auth";
 import Link from "next/link";
 import { AdminApprovalSection } from "@/components/admin-approval-section";
 import { ApprovalMetrics } from "@/components/approval-metrics";
 import { prisma } from "@/lib/prisma";
+import { Prisma } from "@prisma/client";
 
 type AdminView =
   | "pending-events"
@@ -18,6 +17,10 @@ type AdminView =
   | "review-history";
 
 type ReviewCategory = "SPORTS" | "MUSICAL" | "WORKSHOPS" | "EXHIBITIONS" | "CULTURAL" | "RELIGIOUS";
+
+type EventWithCreator = Prisma.EventGetPayload<{ include: { createdBy: true } }>;
+type TicketWithEventUser = Prisma.TicketGetPayload<{ include: { event: true; user: true } }>;
+type EventReviewWithEventUser = Prisma.EventReviewGetPayload<{ include: { event: true; user: true } }>;
 
 const VIEWS: Array<{ id: AdminView; label: string }> = [
   { id: "pending-events", label: "Pending Event Approvals" },
@@ -35,8 +38,8 @@ async function loadAdminData() {
   let supportsTicketReviewHistory = true;
   let supportsUserReviewModeration = true;
 
-  let events;
-  let reviewedEvents;
+  let events: EventWithCreator[];
+  let reviewedEvents: EventWithCreator[];
   try {
     [events, reviewedEvents] = await Promise.all([
       prisma.event.findMany({
@@ -62,12 +65,12 @@ async function loadAdminData() {
         include: { createdBy: true },
         orderBy: { createdAt: "desc" }
       }),
-      Promise.resolve([])
+      Promise.resolve([] as EventWithCreator[])
     ]);
   }
 
-  let tickets;
-  let reviewedTickets;
+  let tickets: TicketWithEventUser[];
+  let reviewedTickets: TicketWithEventUser[];
   try {
     [tickets, reviewedTickets] = await Promise.all([
       prisma.ticket.findMany({
@@ -93,12 +96,12 @@ async function loadAdminData() {
         include: { event: true, user: true },
         orderBy: { createdAt: "desc" }
       }),
-      Promise.resolve([])
+      Promise.resolve([] as TicketWithEventUser[])
     ]);
   }
 
-  let pendingReviews;
-  let reviewedEventReviews;
+  let pendingReviews: EventReviewWithEventUser[];
+  let reviewedEventReviews: EventReviewWithEventUser[];
   try {
     [pendingReviews, reviewedEventReviews] = await Promise.all([
       prisma.eventReview.findMany({
@@ -192,15 +195,27 @@ export default async function AdminPage({
   } = await loadAdminData();
 
   const reviewReportRows: ReviewReportRow[] = [...pendingReviews, ...reviewedEventReviews]
-    .map(toReviewReportRow)
+    .map((review): ReviewReportRow => ({
+      id: review.id,
+      eventId: review.eventId,
+      eventName: review.event.name,
+      eventCategory: review.event.category as ReviewCategory,
+      userName: review.anonymous ? "Anonymous" : review.user.name,
+      userId: review.userId,
+      rating: review.rating,
+      comment: review.comment,
+      anonymous: review.anonymous,
+      moderationStatus: review.moderationStatus,
+      adminComment: review.adminComment,
+      createdAt: review.createdAt.toISOString(),
+      moderatedAt: review.moderatedAt ? review.moderatedAt.toISOString() : null
+    }))
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 
   return (
     <section className="space-y-8">
       <h1 className="page-title">Admin Dashboard</h1>
 
-      <div className="grid gap-4 md:grid-cols-5">
-        <div className="surface-card p-4">
       {/* Approval Metrics */}
       <ApprovalMetrics events={events} tickets={tickets} />
 
