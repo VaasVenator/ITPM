@@ -1,8 +1,14 @@
 import Link from "next/link";
-import { getSessionUser } from "@/lib/auth";
+import { Prisma } from "@prisma/client";
+import { getSessionUser } from "@/lib/server-auth";
 import { prisma } from "@/lib/prisma";
 
-type HomeEvent = Awaited<ReturnType<typeof prisma.event.findMany>>[number];
+type HomeEvent = Prisma.EventGetPayload<{
+  include: {
+    createdBy: true;
+    _count: { select: { votes: true } };
+  };
+}>;
 
 function toColomboDateKey(date: Date): string {
   const parts = new Intl.DateTimeFormat("en-CA", {
@@ -30,7 +36,9 @@ function EventGrid({ events, isAdmin }: { events: HomeEvent[]; isAdmin: boolean 
           {event.eventImage ? (
             <img src={event.eventImage} alt={`${event.name} poster`} className="mb-3 h-44 w-full rounded-xl object-cover" />
           ) : (
-            <div className="mb-3 h-44 w-full rounded-xl bg-slate-100" />
+            <div className="mb-3 flex h-44 w-full items-center justify-center rounded-xl bg-slate-100 text-sm font-medium text-secondary">
+              No preview available
+            </div>
           )}
           <div className="flex flex-wrap items-center gap-2">
             <p className="inline-flex rounded-full bg-highlight px-2.5 py-1 text-xs font-semibold tracking-wide text-emerald-700">{event.category}</p>
@@ -151,7 +159,6 @@ export default async function HomePage() {
       </div>
 
       <div className="space-y-2">
-        <p className="text-xs font-semibold uppercase tracking-[0.24em] text-accent">Campus Experiences</p>
         <h1 className="page-title">Upcoming Events</h1>
       </div>
 

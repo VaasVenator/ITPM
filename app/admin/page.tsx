@@ -1,6 +1,7 @@
-import { getSessionUser } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
 import Link from "next/link";
+import { getSessionUser } from "@/lib/server-auth";
+import { prisma } from "@/lib/prisma";
+import { AsyncForm } from "@/components/ui/async-form";
 
 type AdminView =
   | "pending-events"
@@ -26,6 +27,175 @@ function parseTicketQuantity(notes: string | null): number {
   return Number.isInteger(parsed) && parsed > 0 ? parsed : 1;
 }
 
+async function loadAdminData(activeView: AdminView) {
+  let supportsEventReviewHistory = true;
+  let supportsTicketReviewHistory = true;
+
+  let pendingEventCount = 0;
+  let reviewedEventCount = 0;
+  let pendingTicketCount = 0;
+  let reviewedTicketCount = 0;
+  const events: any[] = [];
+  const reviewedEvents: any[] = [];
+  const tickets: any[] = [];
+  const reviewedTickets: any[] = [];
+  const publishedEvents: any[] = [];
+  const cancelledEvents: any[] = [];
+  const deletedEvents: any[] = [];
+
+  try {
+    pendingEventCount = await prisma.event.count({
+      where: { deleted: false, reviewStatus: "PENDING" } as any
+    });
+
+    if (activeView === "pending-events") {
+      events.push(
+        ...(await prisma.event.findMany({
+          where: { deleted: false, reviewStatus: "PENDING" } as any,
+          include: { createdBy: true },
+          orderBy: { createdAt: "desc" }
+        }))
+      );
+    }
+
+    reviewedEventCount = await prisma.event.count({
+      where: { reviewStatus: { not: "PENDING" } } as any
+    });
+
+    if (activeView === "review-history") {
+      reviewedEvents.push(
+        ...(await prisma.event.findMany({
+          where: { reviewStatus: { not: "PENDING" } } as any,
+          include: { createdBy: true },
+          orderBy: { reviewedAt: "desc" } as any
+        }))
+      );
+    }
+  } catch (error) {
+    if (!(error instanceof Error) || !error.message.includes("Unknown argument `reviewStatus`")) {
+      throw error;
+    }
+
+    supportsEventReviewHistory = false;
+    pendingEventCount = await prisma.event.count({
+      where: { deleted: false, approved: false }
+    });
+
+    if (activeView === "pending-events") {
+      events.push(
+        ...(await prisma.event.findMany({
+          where: { deleted: false, approved: false },
+          include: { createdBy: true },
+          orderBy: { createdAt: "desc" }
+        }))
+      );
+    }
+  }
+
+  try {
+    pendingTicketCount = await prisma.ticket.count({
+      where: { reviewStatus: "PENDING" } as any
+    });
+
+    if (activeView === "pending-tickets") {
+      tickets.push(
+        ...(await prisma.ticket.findMany({
+          where: { reviewStatus: "PENDING" } as any,
+          include: { event: true, user: true },
+          orderBy: { createdAt: "desc" }
+        }))
+      );
+    }
+
+    reviewedTicketCount = await prisma.ticket.count({
+      where: { reviewStatus: { not: "PENDING" } } as any
+    });
+
+    if (activeView === "review-history") {
+      reviewedTickets.push(
+        ...(await prisma.ticket.findMany({
+          where: { reviewStatus: { not: "PENDING" } } as any,
+          include: { event: true, user: true },
+          orderBy: { reviewedAt: "desc" } as any
+        }))
+      );
+    }
+  } catch (error) {
+    if (!(error instanceof Error) || !error.message.includes("Unknown argument `reviewStatus`")) {
+      throw error;
+    }
+
+    supportsTicketReviewHistory = false;
+    pendingTicketCount = await prisma.ticket.count({
+      where: { approved: false }
+    });
+
+    if (activeView === "pending-tickets") {
+      tickets.push(
+        ...(await prisma.ticket.findMany({
+          where: { approved: false },
+          include: { event: true, user: true },
+          orderBy: { createdAt: "desc" }
+        }))
+      );
+    }
+  }
+
+  const [publishedEventCount, cancelledEventCount, deletedEventCount] = await Promise.all([
+    prisma.event.count({ where: { approved: true, published: true, deleted: false } }),
+    prisma.event.count({ where: { cancelled: true, deleted: false } }),
+    prisma.event.count({ where: { deleted: true } })
+  ]);
+
+  if (activeView === "published-events") {
+    publishedEvents.push(
+      ...(await prisma.event.findMany({
+        where: { approved: true, published: true, deleted: false },
+        include: { createdBy: true },
+        orderBy: { date: "asc" }
+      }))
+    );
+  }
+
+  if (activeView === "cancelled-events") {
+    cancelledEvents.push(
+      ...(await prisma.event.findMany({
+        where: { cancelled: true, deleted: false },
+        include: { createdBy: true },
+        orderBy: { date: "desc" }
+      }))
+    );
+  }
+
+  if (activeView === "deleted-events") {
+    deletedEvents.push(
+      ...(await prisma.event.findMany({
+        where: { deleted: true },
+        include: { createdBy: true },
+        orderBy: { createdAt: "desc" }
+      }))
+    );
+  }
+
+  return {
+    pendingEventCount,
+    reviewedEventCount,
+    pendingTicketCount,
+    reviewedTicketCount,
+    publishedEventCount,
+    cancelledEventCount,
+    deletedEventCount,
+    events,
+    reviewedEvents,
+    tickets,
+    reviewedTickets,
+    publishedEvents,
+    cancelledEvents,
+    deletedEvents,
+    supportsReviewHistory: supportsEventReviewHistory && supportsTicketReviewHistory
+  };
+}
+
 export default async function AdminPage({
   searchParams
 }: {
@@ -41,44 +211,45 @@ export default async function AdminPage({
     ? (searchParams?.view as AdminView)
     : "pending-events";
 
-  const [events, tickets, publishedEvents, cancelledEvents, deletedEvents, reviewedEvents, reviewedTickets] =
-    await Promise.all([
-      prisma.event.findMany({
-        where: { deleted: false, reviewStatus: "PENDING" },
-        include: { createdBy: true },
-        orderBy: { createdAt: "desc" }
-      }),
-      prisma.ticket.findMany({
-        where: { reviewStatus: "PENDING" },
-        include: { event: true, user: true },
-        orderBy: { createdAt: "desc" }
-      }),
-      prisma.event.findMany({
-        where: { approved: true, published: true, deleted: false },
-        include: { createdBy: true },
-        orderBy: { date: "asc" }
-      }),
-      prisma.event.findMany({
-        where: { cancelled: true, deleted: false },
-        include: { createdBy: true },
-        orderBy: { date: "desc" }
-      }),
-      prisma.event.findMany({
-        where: { deleted: true },
-        include: { createdBy: true },
-        orderBy: { createdAt: "desc" }
-      }),
-      prisma.event.findMany({
-        where: { reviewStatus: { not: "PENDING" } },
-        include: { createdBy: true },
-        orderBy: { reviewedAt: "desc" }
-      }),
-      prisma.ticket.findMany({
-        where: { reviewStatus: { not: "PENDING" } },
-        include: { event: true, user: true },
-        orderBy: { reviewedAt: "desc" }
-      })
-    ]);
+  let data;
+  try {
+    data = await loadAdminData(activeView);
+  } catch (error) {
+    const details =
+      process.env.NODE_ENV !== "production" && error instanceof Error
+        ? error.message
+        : null;
+
+    return (
+      <section className="surface-card border-rose-200 bg-rose-50 p-6">
+        <h1 className="text-lg font-semibold text-rose-900">Could not connect to database</h1>
+        <p className="mt-2 text-sm text-rose-800">
+          Check your <code>DATABASE_URL</code> and ensure PostgreSQL is reachable.
+        </p>
+        {details ? (
+          <p className="mt-2 break-all text-xs text-rose-700">
+            <span className="font-semibold">Debug:</span> {details}
+          </p>
+        ) : null}
+      </section>
+    );
+  }
+
+  const {
+    pendingEventCount,
+    reviewedEventCount,
+    pendingTicketCount,
+    reviewedTicketCount,
+    publishedEventCount,
+    events,
+    reviewedEvents,
+    tickets,
+    reviewedTickets,
+    publishedEvents,
+    cancelledEvents,
+    deletedEvents,
+    supportsReviewHistory
+  } = data;
 
   return (
     <section className="space-y-8">
@@ -87,21 +258,19 @@ export default async function AdminPage({
       <div className="grid gap-4 md:grid-cols-4">
         <div className="surface-card p-4">
           <p className="text-xs font-semibold uppercase text-secondary">Pending Events</p>
-          <p className="mt-2 text-2xl font-bold text-primary">{events.length}</p>
+          <p className="mt-2 text-2xl font-bold text-primary">{pendingEventCount}</p>
         </div>
         <div className="surface-card p-4">
           <p className="text-xs font-semibold uppercase text-secondary">Pending Tickets</p>
-          <p className="mt-2 text-2xl font-bold text-primary">{tickets.length}</p>
+          <p className="mt-2 text-2xl font-bold text-primary">{pendingTicketCount}</p>
         </div>
         <div className="surface-card p-4">
           <p className="text-xs font-semibold uppercase text-secondary">Published Events</p>
-          <p className="mt-2 text-2xl font-bold text-primary">{publishedEvents.length}</p>
+          <p className="mt-2 text-2xl font-bold text-primary">{publishedEventCount}</p>
         </div>
         <div className="surface-card p-4">
           <p className="text-xs font-semibold uppercase text-secondary">Reviewed Items</p>
-          <p className="mt-2 text-2xl font-bold text-primary">
-            {reviewedEvents.length + reviewedTickets.length}
-          </p>
+          <p className="mt-2 text-2xl font-bold text-primary">{reviewedEventCount + reviewedTicketCount}</p>
         </div>
       </div>
 
@@ -143,7 +312,6 @@ export default async function AdminPage({
                         {event.createdBy.name}
                       </Link>
                     </p>
-
                     <p className="mt-1 text-secondary">Category: {event.category}</p>
                     <p className="text-secondary">Date & Time: {new Date(event.date).toLocaleString()}</p>
                     <p className="text-secondary">Location: {event.location}</p>
@@ -157,13 +325,16 @@ export default async function AdminPage({
                     <p className="mt-2 text-sm font-semibold text-primary">{event.createdBy.name}</p>
                     <p className="mt-1 text-xs text-secondary break-all">{event.createdBy.email}</p>
                     <p className="mt-2 text-xs text-secondary">
-                      Current Review Status: <span className="font-semibold text-primary">{event.reviewStatus}</span>
+                      Current Review Status:{" "}
+                      <span className="font-semibold text-primary">
+                        {"reviewStatus" in event ? String(event.reviewStatus) : "PENDING"}
+                      </span>
                     </p>
                   </div>
                 </div>
 
                 <div className="mt-4 grid gap-3 md:grid-cols-2">
-                  <form action={`/api/admin/events/${event.id}/approve`} method="post" className="space-y-2 rounded-xl border border-slate-200 p-3">
+                  <AsyncForm action={`/api/admin/events/${event.id}/approve`} method="post" className="space-y-2 rounded-xl border border-slate-200 p-3">
                     <label className="block text-xs font-semibold text-secondary">Approval Comment</label>
                     <textarea
                       name="adminComment"
@@ -171,12 +342,12 @@ export default async function AdminPage({
                       className="w-full rounded-lg border border-slate-300 p-2"
                       placeholder="Optional approval note"
                     />
-                    <button className="rounded-lg bg-accent px-3 py-2 font-semibold text-white transition hover:bg-brand-dark">
+                    <button className="rounded-lg bg-accent px-3 py-2 font-semibold text-white transition hover:bg-emerald-600">
                       Approve Event
                     </button>
-                  </form>
+                  </AsyncForm>
 
-                  <form action={`/api/admin/events/${event.id}/reject`} method="post" className="space-y-2 rounded-xl border border-slate-200 p-3">
+                  <AsyncForm action={`/api/admin/events/${event.id}/reject`} method="post" className="space-y-2 rounded-xl border border-slate-200 p-3">
                     <label className="block text-xs font-semibold text-secondary">Rejection Reason</label>
                     <textarea
                       name="adminComment"
@@ -188,7 +359,7 @@ export default async function AdminPage({
                     <button className="rounded-lg bg-primary px-3 py-2 font-semibold text-white transition hover:bg-slate-800">
                       Reject Event
                     </button>
-                  </form>
+                  </AsyncForm>
                 </div>
               </div>
             ))}
@@ -221,7 +392,7 @@ export default async function AdminPage({
                 )}
 
                 <div className="mt-4 grid gap-3 md:grid-cols-2">
-                  <form action={`/api/admin/tickets/${ticket.id}/approve`} method="post" className="space-y-2 rounded-xl border border-slate-200 p-3">
+                  <AsyncForm action={`/api/admin/tickets/${ticket.id}/approve`} method="post" className="space-y-2 rounded-xl border border-slate-200 p-3">
                     <label className="block text-xs font-semibold text-secondary">Approval Comment</label>
                     <textarea
                       name="adminComment"
@@ -229,12 +400,12 @@ export default async function AdminPage({
                       className="w-full rounded-lg border border-slate-300 p-2"
                       placeholder="Optional approval note"
                     />
-                    <button className="rounded-lg bg-accent px-3 py-2 font-semibold text-white transition hover:bg-brand-dark">
+                    <button className="rounded-lg bg-accent px-3 py-2 font-semibold text-white transition hover:bg-emerald-600">
                       Approve Ticket Slip
                     </button>
-                  </form>
+                  </AsyncForm>
 
-                  <form action={`/api/admin/tickets/${ticket.id}/reject`} method="post" className="space-y-2 rounded-xl border border-slate-200 p-3">
+                  <AsyncForm action={`/api/admin/tickets/${ticket.id}/reject`} method="post" className="space-y-2 rounded-xl border border-slate-200 p-3">
                     <label className="block text-xs font-semibold text-secondary">Rejection Reason</label>
                     <textarea
                       name="adminComment"
@@ -246,7 +417,7 @@ export default async function AdminPage({
                     <button className="rounded-lg bg-primary px-3 py-2 font-semibold text-white transition hover:bg-slate-800">
                       Reject Ticket Slip
                     </button>
-                  </form>
+                  </AsyncForm>
                 </div>
               </div>
             ))}
@@ -257,6 +428,12 @@ export default async function AdminPage({
 
       {activeView === "review-history" && (
         <div className="space-y-6">
+          {!supportsReviewHistory ? (
+            <p className="surface-card p-4 text-sm text-secondary">
+              Review history is not available yet because this database is still using the older admin approval schema.
+            </p>
+          ) : null}
+
           <div>
             <h2 className="mb-3 text-xl font-semibold text-primary">Reviewed Events</h2>
             <div className="space-y-3">
@@ -264,11 +441,14 @@ export default async function AdminPage({
                 <div key={event.id} className="surface-card p-4 text-sm">
                   <p className="font-semibold text-primary">{event.name}</p>
                   <p className="text-secondary">Organiser: {event.createdBy.name}</p>
-                  <p className="text-secondary">Status: {event.reviewStatus}</p>
+                  <p className="text-secondary">Status: {String(event.reviewStatus)}</p>
                   <p className="text-secondary">Comment: {event.adminComment || "N/A"}</p>
-                  <p className="text-secondary">Reviewed At: {event.reviewedAt ? new Date(event.reviewedAt).toLocaleString() : "N/A"}</p>
+                  <p className="text-secondary">
+                    Reviewed At: {event.reviewedAt ? new Date(event.reviewedAt).toLocaleString() : "N/A"}
+                  </p>
                 </div>
               ))}
+              {reviewedEvents.length === 0 ? <p className="surface-card p-4 text-sm text-secondary">No reviewed events yet.</p> : null}
             </div>
           </div>
 
@@ -278,11 +458,14 @@ export default async function AdminPage({
               {reviewedTickets.map((ticket) => (
                 <div key={ticket.id} className="surface-card p-4 text-sm">
                   <p className="font-semibold text-primary">{ticket.user.name} • {ticket.event.name}</p>
-                  <p className="text-secondary">Status: {ticket.reviewStatus}</p>
+                  <p className="text-secondary">Status: {String(ticket.reviewStatus)}</p>
                   <p className="text-secondary">Comment: {ticket.adminComment || "N/A"}</p>
-                  <p className="text-secondary">Reviewed At: {ticket.reviewedAt ? new Date(ticket.reviewedAt).toLocaleString() : "N/A"}</p>
+                  <p className="text-secondary">
+                    Reviewed At: {ticket.reviewedAt ? new Date(ticket.reviewedAt).toLocaleString() : "N/A"}
+                  </p>
                 </div>
               ))}
+              {reviewedTickets.length === 0 ? <p className="surface-card p-4 text-sm text-secondary">No reviewed tickets yet.</p> : null}
             </div>
           </div>
         </div>
@@ -298,6 +481,7 @@ export default async function AdminPage({
                 <p className="mt-1 text-secondary">{new Date(event.date).toLocaleString()} • {event.location}</p>
               </div>
             ))}
+            {publishedEvents.length === 0 ? <p className="surface-card p-4 text-sm text-secondary">No published events.</p> : null}
           </div>
         </div>
       )}
@@ -312,6 +496,7 @@ export default async function AdminPage({
                 <p className="mt-1 text-secondary">{new Date(event.date).toLocaleString()} • {event.location}</p>
               </div>
             ))}
+            {cancelledEvents.length === 0 ? <p className="surface-card p-4 text-sm text-secondary">No cancelled events.</p> : null}
           </div>
         </div>
       )}
@@ -326,6 +511,7 @@ export default async function AdminPage({
                 <p className="mt-1 text-secondary">{new Date(event.createdAt).toLocaleString()}</p>
               </div>
             ))}
+            {deletedEvents.length === 0 ? <p className="surface-card p-4 text-sm text-secondary">No deleted events.</p> : null}
           </div>
         </div>
       )}

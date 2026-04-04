@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { eventSchema } from "@/lib/validators";
-import { getSessionUser } from "@/lib/auth";
+import { getSessionUser } from "@/lib/server-auth";
 
 function asErrorMessage(error: unknown): string {
   if (error instanceof Error) return error.message;

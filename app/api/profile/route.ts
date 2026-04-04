@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getSessionUser, authCookieName } from "@/lib/auth";
+import { getSessionUser } from "@/lib/server-auth";
+import { authCookieName } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 const USERNAME_REGEX = /^[a-zA-Z0-9_]{3,24}$/;

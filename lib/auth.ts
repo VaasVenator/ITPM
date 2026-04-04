@@ -1,6 +1,4 @@
 import jwt from "jsonwebtoken";
-import { cookies } from "next/headers";
-
 const AUTH_COOKIE = "session_token";
 
 export type SessionUser = {
@@ -26,8 +24,7 @@ export function verifyToken(token: string): SessionUser | null {
   }
 }
 
-export async function getSessionUser(): Promise<SessionUser | null> {
-  const token = cookies().get(AUTH_COOKIE)?.value;
+export function getSessionUserFromToken(token: string | null | undefined): SessionUser | null {
   if (!token) return null;
   return verifyToken(token);
 }

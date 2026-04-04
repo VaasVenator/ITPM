@@ -45,3 +45,22 @@ export const eventSchema = z.object({
   sponsorsReady: z.boolean().optional(),
   published: z.boolean().optional()
 });
+
+export const eventReviewSchema = z.object({
+  rating: z.number().int().min(1).max(5),
+  comment: z.string().trim().min(10).max(1000),
+  anonymous: z.boolean().optional()
+});
+
+export const eventReviewModerationSchema = z.object({
+  action: z.enum(["approve", "reject"]),
+  adminComment: z.string().trim().min(2).max(1000).optional()
+}).superRefine((data, ctx) => {
+  if (data.action === "reject" && !data.adminComment) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Rejection reason is required.",
+      path: ["adminComment"]
+    });
+  }
+});
