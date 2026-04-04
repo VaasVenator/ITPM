@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getSessionUser } from "@/lib/auth";
+import { getSessionUser } from "@/lib/server-auth";
 import { eventReviewSchema } from "@/lib/validators";
 
 type ReviewPayload = {
@@ -42,6 +42,14 @@ function isMissingReviewTableError(error: unknown) {
 
 export async function GET(_: NextRequest, { params }: { params: { id: string } }) {
   try {
+    const eventReviewModel = (prisma as any).eventReview;
+    if (!eventReviewModel) {
+      return NextResponse.json(
+        { error: "Review data is not available yet in this database." },
+        { status: 503 }
+      );
+    }
+
     const event = await prisma.event.findUnique({
       where: { id: params.id },
       select: { id: true, deleted: true, approved: true, published: true }
@@ -51,7 +59,7 @@ export async function GET(_: NextRequest, { params }: { params: { id: string } }
       return NextResponse.json({ error: "Event not found." }, { status: 404 });
     }
 
-    const reviews = await prisma.eventReview.findMany({
+    const reviews = await eventReviewModel.findMany({
       where: {
         eventId: params.id,
         moderationStatus: "APPROVED"
@@ -72,12 +80,12 @@ export async function GET(_: NextRequest, { params }: { params: { id: string } }
     const averageRating =
       totalReviews === 0
         ? 0
-        : Number((reviews.reduce((sum, review) => sum + review.rating, 0) / totalReviews).toFixed(1));
+        : Number((reviews.reduce((sum: number, review: any) => sum + review.rating, 0) / totalReviews).toFixed(1));
 
     return NextResponse.json({
       averageRating,
       totalReviews,
-      reviews: reviews.map((review) => ({
+      reviews: reviews.map((review: any) => ({
         id: review.id,
         rating: review.rating,
         comment: review.comment,
@@ -99,6 +107,14 @@ export async function GET(_: NextRequest, { params }: { params: { id: string } }
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   try {
+    const eventReviewModel = (prisma as any).eventReview;
+    if (!eventReviewModel) {
+      return NextResponse.json(
+        { error: "Review data is not available yet in this database." },
+        { status: 503 }
+      );
+    }
+
     const user = await getSessionUser();
     if (!user) {
       const loginUrl = new URL("/login", req.url);
@@ -129,7 +145,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       );
     }
 
-    const existingReview = await prisma.eventReview.findUnique({
+    const existingReview = await eventReviewModel.findUnique({
       where: {
         eventId_userId: {
           eventId: params.id,
@@ -146,7 +162,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     }
 
     if (existingReview) {
-      await prisma.eventReview.update({
+      await eventReviewModel.update({
         where: { id: existingReview.id },
         data: {
           rating: parsed.data.rating,
@@ -155,7 +171,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         }
       });
     } else {
-      await prisma.eventReview.create({
+      await eventReviewModel.create({
         data: {
           eventId: params.id,
           userId: user.id,

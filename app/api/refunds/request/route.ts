@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getSessionUser } from "@/lib/auth";
+import { getSessionUser } from "@/lib/server-auth";
 import { prisma } from "@/lib/prisma";
 import { sendRefundRequestNotification } from "@/lib/mailer";
 
@@ -10,6 +10,11 @@ export async function POST(req: Request) {
   }
 
   try {
+    const refundRequestModel = (prisma as any).refundRequest;
+    if (!refundRequestModel) {
+      return NextResponse.json({ error: "Refunds are not available in this database yet" }, { status: 501 });
+    }
+
     const formData = await req.formData();
     const ticketId = String(formData.get("ticketId") || "").trim();
     const reason = String(formData.get("reason") || "").trim();
@@ -36,7 +41,7 @@ export async function POST(req: Request) {
     }
 
     // Check if a refund request already exists for this ticket
-    const existingRefund = await prisma.refundRequest.findFirst({
+    const existingRefund = await refundRequestModel.findFirst({
       where: {
         ticketId,
         status: { in: ["PENDING", "APPROVED"] }
@@ -51,7 +56,7 @@ export async function POST(req: Request) {
     }
 
     // Create refund request
-    const refundRequest = await prisma.refundRequest.create({
+    const refundRequest = await refundRequestModel.create({
       data: {
         ticketId,
         userId: user.id,

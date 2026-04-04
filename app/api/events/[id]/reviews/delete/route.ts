@@ -1,8 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getSessionUser } from "@/lib/auth";
+import { getSessionUser } from "@/lib/server-auth";
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+  const eventReviewModel = (prisma as any).eventReview;
+  if (!eventReviewModel) {
+    return NextResponse.json({ error: "Reviews are not available in this database yet." }, { status: 503 });
+  }
+
   const user = await getSessionUser();
   if (!user) {
     const loginUrl = new URL("/login", req.url);
@@ -10,7 +15,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     return NextResponse.redirect(loginUrl);
   }
 
-  const review = await prisma.eventReview.findUnique({
+  const review = await eventReviewModel.findUnique({
     where: {
       eventId_userId: {
         eventId: params.id,
@@ -30,7 +35,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     );
   }
 
-  await prisma.eventReview.delete({ where: { id: review.id } });
+  await eventReviewModel.delete({ where: { id: review.id } });
 
   return NextResponse.redirect(new URL(`/events/${params.id}`, req.url));
 }

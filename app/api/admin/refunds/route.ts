@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getSessionUser } from "@/lib/auth";
+import { getSessionUser } from "@/lib/server-auth";
 import { prisma } from "@/lib/prisma";
 
 export async function GET(req: Request) {
@@ -9,10 +9,15 @@ export async function GET(req: Request) {
   }
 
   try {
+    const refundRequestModel = (prisma as any).refundRequest;
+    if (!refundRequestModel) {
+      return NextResponse.json({ success: true, refunds: [] }, { status: 200 });
+    }
+
     const { searchParams } = new URL(req.url);
     const status = searchParams.get("status") || "PENDING";
 
-    const refunds = await prisma.refundRequest.findMany({
+    const refunds = await refundRequestModel.findMany({
       where: { status },
       include: {
         user: true,
