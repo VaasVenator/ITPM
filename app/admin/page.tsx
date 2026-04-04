@@ -2,6 +2,7 @@ import Link from "next/link";
 import { getSessionUser } from "@/lib/server-auth";
 import { prisma } from "@/lib/prisma";
 import { AsyncForm } from "@/components/ui/async-form";
+import { ApprovalMetrics } from "@/components/approval-metrics";
 
 type AdminView =
   | "pending-events"
@@ -9,7 +10,30 @@ type AdminView =
   | "cancelled-events"
   | "deleted-events"
   | "pending-tickets"
+  | "pending-refunds"
   | "review-history";
+
+type RefundRequest = {
+  id: string;
+  amount: number | string;
+  reason: string;
+  status: string;
+  createdAt: Date;
+  reviewedAt?: Date | null;
+  adminComment?: string | null;
+  user: {
+    id: string;
+    name: string;
+    email: string;
+  };
+  ticket: {
+    id: string;
+    event: {
+      id: string;
+      name: string;
+    };
+  };
+};
 
 const VIEWS: Array<{ id: AdminView; label: string }> = [
   { id: "pending-events", label: "Pending Event Approvals" },
@@ -17,6 +41,7 @@ const VIEWS: Array<{ id: AdminView; label: string }> = [
   { id: "cancelled-events", label: "Cancelled Events" },
   { id: "deleted-events", label: "Deleted Events" },
   { id: "pending-tickets", label: "Pending Ticket Slips" },
+  { id: "pending-refunds", label: "Pending Refunds" },
   { id: "review-history", label: "Review History" }
 ];
 
@@ -27,14 +52,29 @@ function parseTicketQuantity(notes: string | null): number {
   return Number.isInteger(parsed) && parsed > 0 ? parsed : 1;
 }
 
+function toMetricItem<T extends { createdAt: Date }>(item: T): T & { reviewStatus: string; reviewedAt: Date | null } {
+  const maybeReviewStatus = (item as { reviewStatus?: string }).reviewStatus;
+  const maybeReviewedAt = (item as { reviewedAt?: Date | null }).reviewedAt;
+
+  return {
+    ...item,
+    reviewStatus: maybeReviewStatus ?? "PENDING",
+    reviewedAt: maybeReviewedAt ?? null
+  };
+}
+
 async function loadAdminData(activeView: AdminView) {
   let supportsEventReviewHistory = true;
   let supportsTicketReviewHistory = true;
+  let supportsRefunds = true;
 
   let pendingEventCount = 0;
   let reviewedEventCount = 0;
   let pendingTicketCount = 0;
   let reviewedTicketCount = 0;
+  let pendingRefundCount = 0;
+  let reviewedRefundCount = 0;
+
   const events: any[] = [];
   const reviewedEvents: any[] = [];
   const tickets: any[] = [];
@@ -42,6 +82,8 @@ async function loadAdminData(activeView: AdminView) {
   const publishedEvents: any[] = [];
   const cancelledEvents: any[] = [];
   const deletedEvents: any[] = [];
+  const refunds: RefundRequest[] = [];
+  const reviewedRefunds: RefundRequest[] = [];
 
   try {
     pendingEventCount = await prisma.event.count({
@@ -141,6 +183,34 @@ async function loadAdminData(activeView: AdminView) {
     }
   }
 
+  const refundRequestModel = (prisma as any).refundRequest;
+  if (!refundRequestModel) {
+    supportsRefunds = false;
+  } else {
+    pendingRefundCount = await refundRequestModel.count({ where: { status: "PENDING" } });
+    reviewedRefundCount = await refundRequestModel.count({ where: { status: { not: "PENDING" } } });
+
+    if (activeView === "pending-refunds") {
+      refunds.push(
+        ...(await refundRequestModel.findMany({
+          where: { status: "PENDING" },
+          include: { user: true, ticket: { include: { event: true } } },
+          orderBy: { createdAt: "desc" }
+        }))
+      );
+    }
+
+    if (activeView === "review-history") {
+      reviewedRefunds.push(
+        ...(await refundRequestModel.findMany({
+          where: { status: { not: "PENDING" } },
+          include: { user: true, ticket: { include: { event: true } } },
+          orderBy: { reviewedAt: "desc" }
+        }))
+      );
+    }
+  }
+
   const [publishedEventCount, cancelledEventCount, deletedEventCount] = await Promise.all([
     prisma.event.count({ where: { approved: true, published: true, deleted: false } }),
     prisma.event.count({ where: { cancelled: true, deleted: false } }),
@@ -182,6 +252,8 @@ async function loadAdminData(activeView: AdminView) {
     reviewedEventCount,
     pendingTicketCount,
     reviewedTicketCount,
+    pendingRefundCount,
+    reviewedRefundCount,
     publishedEventCount,
     cancelledEventCount,
     deletedEventCount,
@@ -189,9 +261,12 @@ async function loadAdminData(activeView: AdminView) {
     reviewedEvents,
     tickets,
     reviewedTickets,
+    refunds,
+    reviewedRefunds,
     publishedEvents,
     cancelledEvents,
     deletedEvents,
+    supportsRefunds,
     supportsReviewHistory: supportsEventReviewHistory && supportsTicketReviewHistory
   };
 }
@@ -240,37 +315,54 @@ export default async function AdminPage({
     reviewedEventCount,
     pendingTicketCount,
     reviewedTicketCount,
+    pendingRefundCount,
+    reviewedRefundCount,
     publishedEventCount,
+    cancelledEventCount,
+    deletedEventCount,
     events,
     reviewedEvents,
     tickets,
     reviewedTickets,
+    refunds,
+    reviewedRefunds,
     publishedEvents,
     cancelledEvents,
     deletedEvents,
+    supportsRefunds,
     supportsReviewHistory
   } = data;
+
+  const allEventsForMetrics = [...events, ...reviewedEvents].map(toMetricItem);
+  const allTicketsForMetrics = [...tickets, ...reviewedTickets].map(toMetricItem);
+  const totalReviewedItems = reviewedEventCount + reviewedTicketCount + reviewedRefundCount;
 
   return (
     <section className="space-y-8">
       <h1 className="page-title">Admin Dashboard</h1>
 
-      <div className="grid gap-4 md:grid-cols-4">
-        <div className="surface-card p-4">
+      <ApprovalMetrics events={allEventsForMetrics} tickets={allTicketsForMetrics} />
+
+      <div className="grid gap-4 md:grid-cols-5">
+        <div className="surface-card rounded-lg border border-slate-200 p-4">
           <p className="text-xs font-semibold uppercase text-secondary">Pending Events</p>
           <p className="mt-2 text-2xl font-bold text-primary">{pendingEventCount}</p>
         </div>
-        <div className="surface-card p-4">
+        <div className="surface-card rounded-lg border border-slate-200 p-4">
           <p className="text-xs font-semibold uppercase text-secondary">Pending Tickets</p>
           <p className="mt-2 text-2xl font-bold text-primary">{pendingTicketCount}</p>
         </div>
-        <div className="surface-card p-4">
+        <div className="surface-card rounded-lg border border-slate-200 p-4">
+          <p className="text-xs font-semibold uppercase text-secondary">Pending Refunds</p>
+          <p className="mt-2 text-2xl font-bold text-primary">{pendingRefundCount}</p>
+        </div>
+        <div className="surface-card rounded-lg border border-slate-200 p-4">
           <p className="text-xs font-semibold uppercase text-secondary">Published Events</p>
           <p className="mt-2 text-2xl font-bold text-primary">{publishedEventCount}</p>
         </div>
-        <div className="surface-card p-4">
+        <div className="surface-card rounded-lg border border-slate-200 p-4">
           <p className="text-xs font-semibold uppercase text-secondary">Reviewed Items</p>
-          <p className="mt-2 text-2xl font-bold text-primary">{reviewedEventCount + reviewedTicketCount}</p>
+          <p className="mt-2 text-2xl font-bold text-primary">{totalReviewedItems}</p>
         </div>
       </div>
 
@@ -323,7 +415,7 @@ export default async function AdminPage({
                   <div className="rounded-xl border border-emerald-100 bg-highlight/40 p-3">
                     <p className="text-xs font-semibold uppercase tracking-[0.15em] text-secondary">Requested By</p>
                     <p className="mt-2 text-sm font-semibold text-primary">{event.createdBy.name}</p>
-                    <p className="mt-1 text-xs text-secondary break-all">{event.createdBy.email}</p>
+                    <p className="mt-1 break-all text-xs text-secondary">{event.createdBy.email}</p>
                     <p className="mt-2 text-xs text-secondary">
                       Current Review Status:{" "}
                       <span className="font-semibold text-primary">
@@ -392,7 +484,7 @@ export default async function AdminPage({
                 )}
 
                 <div className="mt-4 grid gap-3 md:grid-cols-2">
-                  <AsyncForm action={`/api/admin/tickets/${ticket.id}/approve`} method="post" className="space-y-2 rounded-xl border border-slate-200 p-3">
+                  <AsyncForm action={`/api/admin/tickets/${ticket.id}/approve`} method="post" redirectTo="/admin?view=pending-tickets" className="space-y-2 rounded-xl border border-slate-200 p-3">
                     <label className="block text-xs font-semibold text-secondary">Approval Comment</label>
                     <textarea
                       name="adminComment"
@@ -405,7 +497,7 @@ export default async function AdminPage({
                     </button>
                   </AsyncForm>
 
-                  <AsyncForm action={`/api/admin/tickets/${ticket.id}/reject`} method="post" className="space-y-2 rounded-xl border border-slate-200 p-3">
+                  <AsyncForm action={`/api/admin/tickets/${ticket.id}/reject`} method="post" redirectTo="/admin?view=pending-tickets" className="space-y-2 rounded-xl border border-slate-200 p-3">
                     <label className="block text-xs font-semibold text-secondary">Rejection Reason</label>
                     <textarea
                       name="adminComment"
@@ -426,6 +518,67 @@ export default async function AdminPage({
         </div>
       )}
 
+      {activeView === "pending-refunds" && (
+        <div className="space-y-4">
+          <h2 className="mb-3 text-xl font-semibold text-primary">Pending Refund Requests</h2>
+          {!supportsRefunds ? (
+            <p className="surface-card p-4 text-sm text-secondary">Refund requests are not available in this database yet.</p>
+          ) : (
+            <div className="space-y-3">
+              {refunds.length > 0 ? (
+                refunds.map((refund) => (
+                  <div key={refund.id} className="surface-card rounded-lg border border-slate-200 p-4 text-sm">
+                    <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+                      <div className="flex-1">
+                        <p className="font-semibold text-primary">{refund.user.name}</p>
+                        <p className="mt-1 text-secondary">Event: {refund.ticket.event.name}</p>
+                        <p className="text-secondary">Reason: {refund.reason}</p>
+                        <p className="mt-2 text-lg font-semibold text-primary">Amount: LKR {Number(refund.amount).toFixed(2)}</p>
+                        <p className="mt-1 text-xs text-secondary">Requested: {new Date(refund.createdAt).toLocaleString()}</p>
+                      </div>
+
+                      <div className="grid gap-3 md:w-[28rem] md:grid-cols-2">
+                        <AsyncForm action={`/api/admin/refunds/${refund.id}/approve`} method="post" redirectTo="/admin?view=pending-refunds" className="space-y-2 rounded-xl border border-slate-200 p-3">
+                          <label className="block text-xs font-semibold text-secondary">Approval Comment</label>
+                          <textarea
+                            name="adminComment"
+                            rows={3}
+                            className="w-full rounded-lg border border-slate-300 p-2"
+                            placeholder="Optional approval note"
+                          />
+                          <button className="rounded-lg bg-accent px-3 py-2 font-semibold text-white transition hover:bg-emerald-600">
+                            Approve Refund
+                          </button>
+                        </AsyncForm>
+
+                        <AsyncForm action={`/api/admin/refunds/${refund.id}/reject`} method="post" redirectTo="/admin?view=pending-refunds" className="space-y-2 rounded-xl border border-slate-200 p-3">
+                          <label className="block text-xs font-semibold text-secondary">Rejection Reason</label>
+                          <textarea
+                            name="adminComment"
+                            rows={3}
+                            className="w-full rounded-lg border border-slate-300 p-2"
+                            placeholder="Reason is required"
+                            required
+                          />
+                          <button
+                            className="rounded-lg px-3 py-2 font-semibold text-white transition hover:bg-red-700"
+                            style={{ backgroundColor: "var(--delete)" }}
+                          >
+                            Reject Refund
+                          </button>
+                        </AsyncForm>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="surface-card rounded-lg p-4 text-center text-sm text-secondary">No pending refund requests.</div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
       {activeView === "review-history" && (
         <div className="space-y-6">
           {!supportsReviewHistory ? (
@@ -443,9 +596,7 @@ export default async function AdminPage({
                   <p className="text-secondary">Organiser: {event.createdBy.name}</p>
                   <p className="text-secondary">Status: {String(event.reviewStatus)}</p>
                   <p className="text-secondary">Comment: {event.adminComment || "N/A"}</p>
-                  <p className="text-secondary">
-                    Reviewed At: {event.reviewedAt ? new Date(event.reviewedAt).toLocaleString() : "N/A"}
-                  </p>
+                  <p className="text-secondary">Reviewed At: {event.reviewedAt ? new Date(event.reviewedAt).toLocaleString() : "N/A"}</p>
                 </div>
               ))}
               {reviewedEvents.length === 0 ? <p className="surface-card p-4 text-sm text-secondary">No reviewed events yet.</p> : null}
@@ -460,13 +611,30 @@ export default async function AdminPage({
                   <p className="font-semibold text-primary">{ticket.user.name} • {ticket.event.name}</p>
                   <p className="text-secondary">Status: {String(ticket.reviewStatus)}</p>
                   <p className="text-secondary">Comment: {ticket.adminComment || "N/A"}</p>
-                  <p className="text-secondary">
-                    Reviewed At: {ticket.reviewedAt ? new Date(ticket.reviewedAt).toLocaleString() : "N/A"}
-                  </p>
+                  <p className="text-secondary">Reviewed At: {ticket.reviewedAt ? new Date(ticket.reviewedAt).toLocaleString() : "N/A"}</p>
                 </div>
               ))}
               {reviewedTickets.length === 0 ? <p className="surface-card p-4 text-sm text-secondary">No reviewed tickets yet.</p> : null}
             </div>
+          </div>
+
+          <div>
+            <h2 className="mb-3 text-xl font-semibold text-primary">Reviewed Refunds</h2>
+            {!supportsRefunds ? (
+              <p className="surface-card p-4 text-sm text-secondary">Refund review history is not available in this database yet.</p>
+            ) : (
+              <div className="space-y-3">
+                {reviewedRefunds.map((refund) => (
+                  <div key={refund.id} className="surface-card p-4 text-sm">
+                    <p className="font-semibold text-primary">{refund.user.name} • {refund.ticket.event.name}</p>
+                    <p className="text-secondary">Status: {refund.status}</p>
+                    <p className="text-secondary">Comment: {refund.adminComment || "N/A"}</p>
+                    <p className="text-secondary">Reviewed At: {refund.reviewedAt ? new Date(refund.reviewedAt).toLocaleString() : "N/A"}</p>
+                  </div>
+                ))}
+                {reviewedRefunds.length === 0 ? <p className="surface-card p-4 text-sm text-secondary">No reviewed refunds yet.</p> : null}
+              </div>
+            )}
           </div>
         </div>
       )}
