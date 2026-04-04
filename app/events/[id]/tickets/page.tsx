@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { getSessionUser } from "@/lib/auth";
+import { getSessionUser } from "@/lib/server-auth";
 import {TicketSelection} from "@/components/forms/ticket-selection";
 import { prisma } from "@/lib/prisma";
 

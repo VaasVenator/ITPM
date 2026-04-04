@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { getSessionUser } from "@/lib/auth";
+import { getSessionUser } from "@/lib/server-auth";
 import { RSVPDetailForm } from "@/components/forms/rsvp-detail-form";
 import { prisma } from "@/lib/prisma";
 
