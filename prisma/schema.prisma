@@ -53,10 +53,7 @@ model User {
   tickets         Ticket[]
   votes           Vote[]
   refundRequests  RefundRequest[]
-  eventsCreated  Event[]
-  tickets        Ticket[]
-  votes          Vote[]
-  eventReviews   EventReview[]
+  eventReviews    EventReview[]
 }
 
 model Event {
