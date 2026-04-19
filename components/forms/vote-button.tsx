@@ -1,24 +1,40 @@
 "use client";
 
+import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 
 export function VoteButton({ eventId, voteType, label }: { eventId: string; voteType: "RSVP" | "ORGANISER_VOTE"; label: string }) {
+  const router = useRouter();
+  const [submitting, setSubmitting] = useState(false);
+
   async function submitVote() {
-    const res = await fetch("/api/votes", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ eventId, voteType })
-    });
+    if (submitting) return;
+    setSubmitting(true);
 
-    if (res.status === 401) {
-      window.location.href = "/login";
-      return;
-    }
+    try {
+      const res = await fetch("/api/votes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ eventId, voteType })
+      });
 
-    if (res.ok) {
-      window.location.reload();
+      if (res.status === 401) {
+        router.replace(`/login?redirect=/events/${eventId}`);
+        return;
+      }
+
+      if (res.ok) {
+        router.refresh();
+      }
+    } finally {
+      setSubmitting(false);
     }
   }
 
-  return <Button onClick={submitVote}>{label}</Button>;
+  return (
+    <Button onClick={submitVote} disabled={submitting}>
+      {submitting ? "Please wait..." : label}
+    </Button>
+  );
 }

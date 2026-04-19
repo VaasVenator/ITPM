@@ -2,7 +2,7 @@ import bcrypt from "bcryptjs";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { signupSchema } from "@/lib/validators";
-import { authCookieName, signToken } from "@/lib/auth";
+import { authCookieName, getSafeSessionProfileImage, signToken } from "@/lib/auth";
 
 export async function POST(req: NextRequest) {
   try {
@@ -44,7 +44,13 @@ export async function POST(req: NextRequest) {
       }
     });
 
-    const token = signToken({ id: user.id, email: user.email, name: user.name, role: user.role });
+    const token = signToken({
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      role: user.role,
+      profileImage: getSafeSessionProfileImage(user.profileImage)
+    });
     const res = NextResponse.json({ ok: true });
     res.cookies.set(authCookieName(), token, { httpOnly: true, sameSite: "lax", path: "/" });
     return res;

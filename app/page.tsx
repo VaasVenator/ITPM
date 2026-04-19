@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Prisma } from "@prisma/client";
 import { getSessionUser } from "@/lib/server-auth";
 import { prisma } from "@/lib/prisma";
+import { AsyncForm } from "@/components/ui/async-form";
 
 type HomeEvent = Prisma.EventGetPayload<{
   include: {
@@ -68,17 +69,17 @@ function EventGrid({ events, isAdmin }: { events: HomeEvent[]; isAdmin: boolean 
             {isAdmin ? (
               <>
                 {!event.cancelled ? (
-                  <form action={`/api/admin/events/${event.id}/cancel`} method="post">
+                  <AsyncForm action={`/api/admin/events/${event.id}/cancel`} method="post">
                     <button className="rounded-lg bg-amber-500 px-3 py-2 text-sm font-semibold text-white transition hover:bg-amber-600" type="submit">
                       Cancel
                     </button>
-                  </form>
+                  </AsyncForm>
                 ) : null}
-                <form action={`/api/admin/events/${event.id}/delete`} method="post">
+                <AsyncForm action={`/api/admin/events/${event.id}/delete`} method="post">
                   <button className="rounded-lg bg-rose-600 px-3 py-2 text-sm font-semibold text-white transition hover:bg-rose-700" type="submit">
                     Delete
                   </button>
-                </form>
+                </AsyncForm>
               </>
             ) : null}
           </div>
@@ -142,7 +143,6 @@ export default async function HomePage() {
           className="group relative overflow-hidden rounded-2xl bg-gradient-to-r from-emerald-500 via-emerald-500 to-teal-500 p-5 text-white shadow-md transition hover:-translate-y-1 hover:shadow-xl"
         >
           <div className="absolute -right-8 -top-8 h-28 w-28 rounded-full bg-white/20 blur-xl" />
-          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-50">Organiser</p>
           <p className="mt-1 text-2xl font-extrabold tracking-tight">Create Event</p>
           <p className="mt-1 text-sm text-emerald-50">Plan and submit your next university event.</p>
         </Link>
@@ -152,7 +152,6 @@ export default async function HomePage() {
           className="group relative overflow-hidden rounded-2xl bg-gradient-to-r from-slate-900 via-slate-800 to-slate-700 p-5 text-white shadow-md transition hover:-translate-y-1 hover:shadow-xl"
         >
           <div className="absolute -right-8 -top-8 h-28 w-28 rounded-full bg-emerald-300/20 blur-xl" />
-          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-200">Dashboard</p>
           <p className="mt-1 text-2xl font-extrabold tracking-tight">My Events</p>
           <p className="mt-1 text-sm text-slate-200">Track approvals, publishing, and sponsorship status.</p>
         </Link>
