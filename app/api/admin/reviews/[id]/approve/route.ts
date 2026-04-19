@@ -4,6 +4,11 @@ import { prisma } from "@/lib/prisma";
 
 export async function POST(req: Request, { params }: { params: { id: string } }) {
   try {
+    const eventReviewModel = (prisma as any).eventReview;
+    if (!eventReviewModel) {
+      return NextResponse.json({ error: "Reviews are not available in this database yet." }, { status: 501 });
+    }
+
     const user = await getSessionUser();
 
     if (!user || user.role !== "admin") {
@@ -13,7 +18,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     const formData = await req.formData();
     const adminComment = String(formData.get("adminComment") || "").trim();
 
-    const review = await prisma.eventReview.findUnique({ where: { id: params.id } });
+    const review = await eventReviewModel.findUnique({ where: { id: params.id } });
 
     if (!review) {
       return NextResponse.json({ error: "Review not found." }, { status: 404 });
@@ -23,7 +28,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       return NextResponse.json({ error: "This review has already been moderated." }, { status: 400 });
     }
 
-    await prisma.eventReview.update({
+    await eventReviewModel.update({
       where: { id: params.id },
       data: {
         moderationStatus: "APPROVED",

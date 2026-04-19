@@ -68,7 +68,6 @@ export default async function MyEventsPage() {
   return (
     <section className="space-y-6">
       <div className="space-y-2">
-        <p className="text-xs font-semibold uppercase tracking-[0.22em] text-accent">Organiser Desk</p>
         <h1 className="page-title">My Events</h1>
         <p className="text-sm text-secondary">Track your event progress, sponsorships, and publishing in one place.</p>
       </div>
