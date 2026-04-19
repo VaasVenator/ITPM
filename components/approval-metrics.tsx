@@ -10,6 +10,9 @@ interface ApprovalStats {
   averageReviewTime: number;
   eventApprovals: number;
   ticketApprovals: number;
+  totalItems: number;
+  totalEventItems: number;
+  totalTicketItems: number;
 }
 
 interface StatCardProps {
@@ -36,29 +39,10 @@ function StatCard({ label, value, icon, subText, bgColor = "bg-emerald-50" }: St
 }
 
 export function ApprovalMetrics({
-  events,
-  tickets,
+  stats
 }: {
-  events: Array<{ reviewStatus: string; reviewedAt?: Date | null; createdAt: Date }>;
-  tickets: Array<{ reviewStatus: string; reviewedAt?: Date | null; createdAt: Date }>;
+  stats: ApprovalStats;
 }) {
-  const allItems = [...events, ...tickets];
-
-  const stats: ApprovalStats = {
-    totalApproved: allItems.filter((i) => i.reviewStatus === "APPROVED").length,
-    totalRejected: allItems.filter((i) => i.reviewStatus === "REJECTED").length,
-    totalPending: allItems.filter((i) => i.reviewStatus === "PENDING").length,
-    approvalRate:
-      allItems.length > 0
-        ? Math.round(
-            (allItems.filter((i) => i.reviewStatus === "APPROVED").length / allItems.length) * 100
-          )
-        : 0,
-    averageReviewTime: calculateAverageReviewTime(allItems),
-    eventApprovals: events.filter((e) => e.reviewStatus === "APPROVED").length,
-    ticketApprovals: tickets.filter((t) => t.reviewStatus === "APPROVED").length,
-  };
-
   return (
     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
       <StatCard
@@ -93,13 +77,13 @@ export function ApprovalMetrics({
         label="Events Approved"
         value={stats.eventApprovals}
         icon="📅"
-        subText={`of ${events.length} total`}
+        subText={`of ${stats.totalEventItems} total`}
       />
       <StatCard
         label="Tickets Approved"
         value={stats.ticketApprovals}
         icon="🎟️"
-        subText={`of ${tickets.length} total`}
+        subText={`of ${stats.totalTicketItems} total`}
       />
       <StatCard
         label="Avg Review Time"
@@ -110,28 +94,11 @@ export function ApprovalMetrics({
       />
       <StatCard
         label="Total Items"
-        value={allItems.length}
+        value={stats.totalItems}
         icon="📦"
         subText="Events + Tickets"
         bgColor="bg-indigo-50"
       />
     </div>
   );
-}
-
-function calculateAverageReviewTime(
-  items: Array<{ reviewStatus: string; reviewedAt?: Date | null; createdAt: Date }>
-): number {
-  const reviewed = items.filter((i) => i.reviewStatus !== "PENDING" && i.reviewedAt);
-
-  if (reviewed.length === 0) return 0;
-
-  const totalTime = reviewed.reduce((sum, item) => {
-    const created = new Date(item.createdAt).getTime();
-    const reviewed = new Date(item.reviewedAt!).getTime();
-    const hours = (reviewed - created) / (1000 * 60 * 60);
-    return sum + hours;
-  }, 0);
-
-  return Math.round(totalTime / reviewed.length);
 }

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/server-auth";
-import { authCookieName } from "@/lib/auth";
+import { authCookieName, getSafeSessionProfileImage, signToken } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 const USERNAME_REGEX = /^[a-zA-Z0-9_]{3,24}$/;
@@ -108,7 +108,20 @@ export async function PATCH(req: NextRequest) {
       }
     });
 
-    return NextResponse.json({ ok: true, user: updatedUser });
+    const res = NextResponse.json({ ok: true, user: updatedUser });
+    res.cookies.set(
+      authCookieName(),
+      signToken({
+        id: updatedUser.id,
+        email: updatedUser.email,
+        name: updatedUser.name,
+        role: updatedUser.role,
+        profileImage: getSafeSessionProfileImage(updatedUser.profileImage)
+      }),
+      { httpOnly: true, sameSite: "lax", path: "/" }
+    );
+
+    return res;
   } catch (error) {
     console.error("Profile update failed:", error);
     return NextResponse.json({ error: "Failed to update profile." }, { status: 500 });

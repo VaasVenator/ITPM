@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getSessionUser } from "@/lib/server-auth";
 import { prisma } from "@/lib/prisma";
+import { EventImageEditor } from "@/components/forms/event-image-editor";
 
 function parseTicketQuantity(notes: string | null): number {
   if (!notes) return 1;
@@ -162,6 +163,14 @@ export default async function OrganiserEventDetailsPage({
             </div>
           </div>
         </div>
+      </section>
+
+      <section className="surface-card p-5 md:p-6">
+        <EventImageEditor
+          eventId={event.id}
+          initialImage={event.eventImage}
+          eventName={event.name}
+        />
       </section>
 
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">

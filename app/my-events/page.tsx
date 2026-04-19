@@ -69,7 +69,6 @@ export default async function MyEventsPage() {
     <section className="space-y-6">
       <div className="space-y-2">
         <h1 className="page-title">My Events</h1>
-        <p className="text-sm text-secondary">Track your event progress, sponsorships, and publishing in one place.</p>
       </div>
 
       {events.length === 0 ? (
@@ -93,7 +92,6 @@ export default async function MyEventsPage() {
                     </div>
 
                     <h2 className="mt-4 text-2xl font-bold tracking-tight text-primary">{event.name}</h2>
-                    <p className="mt-2 text-sm text-secondary">{state.summary}</p>
 
                     <div className="mt-5 grid gap-3 sm:grid-cols-2">
                       <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
@@ -108,42 +106,38 @@ export default async function MyEventsPage() {
                   </div>
 
                   <div className="border-t border-slate-200 bg-slate-50/80 p-5 md:border-l md:border-t-0 md:p-6">
-                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-secondary">Next Step</p>
-                    <p className="mt-2 text-sm text-primary">
-                      {event.approved && !event.published
-                        ? "Choose how you want to move this event live."
-                        : event.published
-                          ? "Your event is already visible to students."
-                          : "Wait until the admin team finishes the review."}
-                    </p>
+                    <div className="space-y-3">
+                      <div className="flex flex-wrap gap-3">
+                        <Link
+                          href={`/my-events/${event.id}`}
+                          className="rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
+                        >
+                          View Details
+                        </Link>
 
-                    <div className="mt-4 flex flex-wrap gap-3">
-                      <Link
-                        href={`/my-events/${event.id}`}
-                        className="rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
-                      >
-                        View Details
-                      </Link>
-
-                      {event.approved && !event.published ? (
-                        <>
-                          <Link
-                            href={`/sponsorship/${event.id}`}
-                            className="rounded-lg bg-highlight px-3 py-2 text-sm font-semibold text-primary transition hover:bg-emerald-100"
-                          >
-                            Request Sponsorship
-                          </Link>
-                          <form action={`/api/events/${event.id}`} method="post">
-                            <input type="hidden" name="action" value="publishWithoutSponsors" />
-                            <button
-                              className="rounded-lg bg-accent px-3 py-2 text-sm font-semibold text-white transition hover:bg-emerald-600"
-                              type="submit"
+                        {event.approved && !event.published ? (
+                          <>
+                            <Link
+                              href={`/sponsorship/${event.id}`}
+                              className="rounded-lg bg-highlight px-3 py-2 text-sm font-semibold text-primary transition hover:bg-emerald-100"
                             >
-                              Sponsors Ready & Publish
-                            </button>
-                          </form>
-                        </>
-                      ) : null}
+                              Request Sponsorship
+                            </Link>
+                            <form action={`/api/events/${event.id}`} method="post">
+                              <input type="hidden" name="action" value="publishWithoutSponsors" />
+                              <button
+                                className="rounded-lg bg-accent px-3 py-2 text-sm font-semibold text-white transition hover:bg-emerald-600"
+                                type="submit"
+                              >
+                                Sponsors Ready & Publish
+                              </button>
+                            </form>
+                          </>
+                        ) : null}
+                      </div>
+
+                      <p className="text-sm text-secondary">{state.summary}</p>
+
                     </div>
                   </div>
                 </div>
