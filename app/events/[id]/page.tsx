@@ -2,11 +2,8 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { getSessionUser } from "@/lib/server-auth";
-import { StepHeader } from "@/components/tickets/step-header";
 import { TicketForm } from "@/components/forms/ticket-form";
 import { VoteButton } from "@/components/forms/vote-button";
-import { prisma } from "@/lib/prisma";
-import { getSessionUser } from "@/lib/server-auth";
 
 function asObject(customFields: unknown): Record<string, unknown> {
   if (!customFields || typeof customFields !== "object" || Array.isArray(customFields)) {

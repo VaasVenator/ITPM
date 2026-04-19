@@ -1,9 +1,6 @@
-import ReviewReports, { type ReviewReportRow } from "@/components/admin/review-reports";
-import { getSessionUser } from "@/lib/server-auth";
 import Link from "next/link";
 import { getSessionUser } from "@/lib/server-auth";
 import { prisma } from "@/lib/prisma";
-import { Prisma } from "@prisma/client";
 import { AsyncForm } from "@/components/ui/async-form";
 import { ApprovalMetrics } from "@/components/approval-metrics";
 
@@ -15,6 +12,12 @@ type AdminView =
   | "pending-tickets"
   | "pending-refunds"
   | "review-history";
+
+type MetricReviewItem = {
+  createdAt: Date;
+  reviewStatus: string;
+  reviewedAt: Date | null;
+};
 
 type RefundRequest = {
   id: string;
@@ -37,16 +40,6 @@ type RefundRequest = {
     };
   };
 };
-
-type MetricReviewItem = {
-  createdAt: Date;
-  reviewStatus: string;
-  reviewedAt: Date | null;
-};
-
-type EventWithCreator = Prisma.EventGetPayload<{ include: { createdBy: true } }>;
-type TicketWithEventUser = Prisma.TicketGetPayload<{ include: { event: true; user: true } }>;
-type EventReviewWithEventUser = Prisma.EventReviewGetPayload<{ include: { event: true; user: true } }>;
 
 const VIEWS: Array<{ id: AdminView; label: string }> = [
   { id: "pending-events", label: "Pending Event Approvals" },
@@ -77,20 +70,19 @@ async function loadAdminData(activeView: AdminView) {
   let pendingRefundCount = 0;
   let reviewedRefundCount = 0;
 
+  let metricEvents: MetricReviewItem[] = [];
+  let metricTickets: MetricReviewItem[] = [];
+
   const events: any[] = [];
   const reviewedEvents: any[] = [];
   const tickets: any[] = [];
   const reviewedTickets: any[] = [];
+  const refunds: RefundRequest[] = [];
+  const reviewedRefunds: RefundRequest[] = [];
   const publishedEvents: any[] = [];
   const cancelledEvents: any[] = [];
   const deletedEvents: any[] = [];
-  const refunds: RefundRequest[] = [];
-  const reviewedRefunds: RefundRequest[] = [];
-  let metricEvents: MetricReviewItem[] = [];
-  let metricTickets: MetricReviewItem[] = [];
 
-  let events: EventWithCreator[];
-  let reviewedEvents: EventWithCreator[];
   try {
     metricEvents = (await prisma.event.findMany({
       where: { deleted: false },
@@ -102,6 +94,10 @@ async function loadAdminData(activeView: AdminView) {
       where: { deleted: false, reviewStatus: "PENDING" } as any
     });
 
+    reviewedEventCount = await prisma.event.count({
+      where: { reviewStatus: { not: "PENDING" } } as any
+    });
+
     if (activeView === "pending-events") {
       events.push(
         ...(await prisma.event.findMany({
@@ -111,10 +107,6 @@ async function loadAdminData(activeView: AdminView) {
         }))
       );
     }
-
-    reviewedEventCount = await prisma.event.count({
-      where: { reviewStatus: { not: "PENDING" } } as any
-    });
 
     if (activeView === "review-history") {
       reviewedEvents.push(
@@ -131,20 +123,12 @@ async function loadAdminData(activeView: AdminView) {
     }
 
     supportsEventReviewHistory = false;
-    metricEvents = (
-      await prisma.event.findMany({
-        where: { deleted: false },
-        select: { createdAt: true, approved: true },
-        orderBy: { createdAt: "desc" }
-      }),
-      Promise.resolve([] as EventWithCreator[])
-    ]);
-  }
-
-  let tickets: TicketWithEventUser[];
-  let reviewedTickets: TicketWithEventUser[];
-      })
-    ).map((event) => ({
+    const legacyEvents = await prisma.event.findMany({
+      where: { deleted: false },
+      select: { createdAt: true, approved: true },
+      orderBy: { createdAt: "desc" }
+    });
+    metricEvents = legacyEvents.map((event) => ({
       createdAt: event.createdAt,
       reviewStatus: event.approved ? "APPROVED" : "PENDING",
       reviewedAt: null
@@ -152,6 +136,9 @@ async function loadAdminData(activeView: AdminView) {
 
     pendingEventCount = await prisma.event.count({
       where: { deleted: false, approved: false }
+    });
+    reviewedEventCount = await prisma.event.count({
+      where: { deleted: false, approved: true }
     });
 
     if (activeView === "pending-events") {
@@ -175,6 +162,10 @@ async function loadAdminData(activeView: AdminView) {
       where: { reviewStatus: "PENDING" } as any
     });
 
+    reviewedTicketCount = await prisma.ticket.count({
+      where: { reviewStatus: { not: "PENDING" } } as any
+    });
+
     if (activeView === "pending-tickets") {
       tickets.push(
         ...(await prisma.ticket.findMany({
@@ -184,10 +175,6 @@ async function loadAdminData(activeView: AdminView) {
         }))
       );
     }
-
-    reviewedTicketCount = await prisma.ticket.count({
-      where: { reviewStatus: { not: "PENDING" } } as any
-    });
 
     if (activeView === "review-history") {
       reviewedTickets.push(
@@ -204,38 +191,18 @@ async function loadAdminData(activeView: AdminView) {
     }
 
     supportsTicketReviewHistory = false;
-    metricTickets = (
-      await prisma.ticket.findMany({
-        select: { createdAt: true, approved: true },
-        orderBy: { createdAt: "desc" }
-      }),
-      Promise.resolve([] as TicketWithEventUser[])
-    ]);
-  }
-
-  let pendingReviews: EventReviewWithEventUser[];
-  let reviewedEventReviews: EventReviewWithEventUser[];
-  try {
-    [pendingReviews, reviewedEventReviews] = await Promise.all([
-      prisma.eventReview.findMany({
-        where: { moderationStatus: "PENDING" },
-        include: { event: true, user: true },
-        orderBy: { createdAt: "desc" }
-      }),
-      prisma.eventReview.findMany({
-        where: { moderationStatus: { not: "PENDING" } },
-        include: { event: true, user: true },
-        orderBy: { moderatedAt: "desc" }
-      })
-    ).map((ticket) => ({
+    const legacyTickets = await prisma.ticket.findMany({
+      select: { createdAt: true, approved: true },
+      orderBy: { createdAt: "desc" }
+    });
+    metricTickets = legacyTickets.map((ticket) => ({
       createdAt: ticket.createdAt,
       reviewStatus: ticket.approved ? "APPROVED" : "PENDING",
       reviewedAt: null
     }));
 
-    pendingTicketCount = await prisma.ticket.count({
-      where: { approved: false }
-    });
+    pendingTicketCount = await prisma.ticket.count({ where: { approved: false } });
+    reviewedTicketCount = await prisma.ticket.count({ where: { approved: true } });
 
     if (activeView === "pending-tickets") {
       tickets.push(
@@ -378,15 +345,6 @@ export default async function AdminPage({
   }
 
   const {
-    pendingEventCount,
-    reviewedEventCount,
-    pendingTicketCount,
-    reviewedTicketCount,
-    pendingRefundCount,
-    reviewedRefundCount,
-    publishedEventCount,
-    cancelledEventCount,
-    deletedEventCount,
     events,
     reviewedEvents,
     tickets,
@@ -402,55 +360,11 @@ export default async function AdminPage({
     supportsReviewHistory
   } = data;
 
-  const reviewReportRows: ReviewReportRow[] = [...pendingReviews, ...reviewedEventReviews]
-    .map((review): ReviewReportRow => ({
-      id: review.id,
-      eventId: review.eventId,
-      eventName: review.event.name,
-      eventCategory: review.event.category as ReviewCategory,
-      userName: review.anonymous ? "Anonymous" : review.user.name,
-      userId: review.userId,
-      rating: review.rating,
-      comment: review.comment,
-      anonymous: review.anonymous,
-      moderationStatus: review.moderationStatus,
-      adminComment: review.adminComment,
-      createdAt: review.createdAt.toISOString(),
-      moderatedAt: review.moderatedAt ? review.moderatedAt.toISOString() : null
-    }))
-    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-  const allEventsForMetrics = metricEvents;
-  const allTicketsForMetrics = metricTickets;
-  const totalReviewedItems = reviewedEventCount + reviewedTicketCount + reviewedRefundCount;
-
   return (
     <section className="space-y-8">
       <h1 className="page-title">Admin Dashboard</h1>
 
-      {/* Approval Metrics */}
-      <ApprovalMetrics events={events} tickets={tickets} />
-
-      <div className="grid gap-4 md:grid-cols-4">
-        <div className="surface-card p-4 rounded-lg border border-slate-200">
-          <p className="text-xs font-semibold uppercase text-secondary">Pending Events</p>
-          <p className="mt-2 text-2xl font-bold text-primary">{events.length}</p>
-        </div>
-        <div className="surface-card p-4 rounded-lg border border-slate-200">
-          <p className="text-xs font-semibold uppercase text-secondary">Pending Tickets</p>
-          <p className="mt-2 text-2xl font-bold text-primary">{tickets.length}</p>
-        </div>
-        <div className="surface-card p-4 rounded-lg border border-slate-200">
-          <p className="text-xs font-semibold uppercase text-secondary">Published Events</p>
-          <p className="mt-2 text-2xl font-bold text-primary">{publishedEvents.length}</p>
-        </div>
-        <div className="surface-card p-4 rounded-lg border border-slate-200">
-          <p className="text-xs font-semibold uppercase text-secondary">Reviewed Items</p>
-          <p className="mt-2 text-2xl font-bold text-primary">
-            {reviewedEvents.length + reviewedTickets.length + reviewedEventReviews.length}
-          </p>
-        </div>
-      </div>
-      <ApprovalMetrics events={allEventsForMetrics} tickets={allTicketsForMetrics} />
+      <ApprovalMetrics events={metricEvents} tickets={metricTickets} />
 
       <div className="flex flex-wrap gap-2">
         {VIEWS.map((view) => (
@@ -514,29 +428,14 @@ export default async function AdminPage({
                 <div className="mt-4 grid gap-3 md:grid-cols-2">
                   <AsyncForm action={`/api/admin/events/${event.id}/approve`} method="post" className="space-y-2 rounded-xl border border-slate-200 p-3">
                     <label className="block text-xs font-semibold text-secondary">Approval Comment</label>
-                    <textarea
-                      name="adminComment"
-                      rows={3}
-                      className="w-full rounded-lg border border-slate-300 p-2"
-                      placeholder="Optional approval note"
-                    />
-                    <button className="rounded-lg bg-accent px-3 py-2 font-semibold text-white transition hover:bg-emerald-600">
-                      Approve Event
-                    </button>
+                    <textarea name="adminComment" rows={3} className="w-full rounded-lg border border-slate-300 p-2" placeholder="Optional approval note" />
+                    <button className="rounded-lg bg-accent px-3 py-2 font-semibold text-white transition hover:bg-emerald-600">Approve Event</button>
                   </AsyncForm>
 
                   <AsyncForm action={`/api/admin/events/${event.id}/reject`} method="post" className="space-y-2 rounded-xl border border-slate-200 p-3">
                     <label className="block text-xs font-semibold text-secondary">Rejection Reason</label>
-                    <textarea
-                      name="adminComment"
-                      rows={3}
-                      className="w-full rounded-lg border border-slate-300 p-2"
-                      placeholder="Reason is required"
-                      required
-                    />
-                    <button className="rounded-lg bg-primary px-3 py-2 font-semibold text-white transition hover:bg-slate-800">
-                      Reject Event
-                    </button>
+                    <textarea name="adminComment" rows={3} className="w-full rounded-lg border border-slate-300 p-2" placeholder="Reason is required" required />
+                    <button className="rounded-lg bg-primary px-3 py-2 font-semibold text-white transition hover:bg-slate-800">Reject Event</button>
                   </AsyncForm>
                 </div>
               </div>
@@ -555,16 +454,10 @@ export default async function AdminPage({
                 <p className="font-semibold text-primary">{ticket.user.name} • {ticket.event.name}</p>
                 <p className="mt-1 text-secondary">Quantity: {parseTicketQuantity(ticket.notes)}</p>
                 <p className="text-secondary">Amount per ticket: LKR {Number(ticket.price).toFixed(2)}</p>
-                <p className="text-secondary">
-                  Total amount: LKR {(Number(ticket.price) * parseTicketQuantity(ticket.notes)).toFixed(2)}
-                </p>
+                <p className="text-secondary">Total amount: LKR {(Number(ticket.price) * parseTicketQuantity(ticket.notes)).toFixed(2)}</p>
 
                 {ticket.paymentSlip.startsWith("data:image/") ? (
-                  <img
-                    src={ticket.paymentSlip}
-                    alt={`Bank slip for ${ticket.user.name}`}
-                    className="mt-2 h-56 w-full rounded-xl border border-slate-200 object-contain bg-white"
-                  />
+                  <img src={ticket.paymentSlip} alt={`Bank slip for ${ticket.user.name}`} className="mt-2 h-56 w-full rounded-xl border border-slate-200 bg-white object-contain" />
                 ) : (
                   <p className="mt-1 break-all text-secondary">Slip: {ticket.paymentSlip}</p>
                 )}
@@ -572,29 +465,14 @@ export default async function AdminPage({
                 <div className="mt-4 grid gap-3 md:grid-cols-2">
                   <AsyncForm action={`/api/admin/tickets/${ticket.id}/approve`} method="post" redirectTo="/admin?view=pending-tickets" className="space-y-2 rounded-xl border border-slate-200 p-3">
                     <label className="block text-xs font-semibold text-secondary">Approval Comment</label>
-                    <textarea
-                      name="adminComment"
-                      rows={3}
-                      className="w-full rounded-lg border border-slate-300 p-2"
-                      placeholder="Optional approval note"
-                    />
-                    <button className="rounded-lg bg-accent px-3 py-2 font-semibold text-white transition hover:bg-emerald-600">
-                      Approve Ticket Slip
-                    </button>
+                    <textarea name="adminComment" rows={3} className="w-full rounded-lg border border-slate-300 p-2" placeholder="Optional approval note" />
+                    <button className="rounded-lg bg-accent px-3 py-2 font-semibold text-white transition hover:bg-emerald-600">Approve Ticket Slip</button>
                   </AsyncForm>
 
                   <AsyncForm action={`/api/admin/tickets/${ticket.id}/reject`} method="post" redirectTo="/admin?view=pending-tickets" className="space-y-2 rounded-xl border border-slate-200 p-3">
                     <label className="block text-xs font-semibold text-secondary">Rejection Reason</label>
-                    <textarea
-                      name="adminComment"
-                      rows={3}
-                      className="w-full rounded-lg border border-slate-300 p-2"
-                      placeholder="Reason is required"
-                      required
-                    />
-                    <button className="rounded-lg bg-primary px-3 py-2 font-semibold text-white transition hover:bg-slate-800">
-                      Reject Ticket Slip
-                    </button>
+                    <textarea name="adminComment" rows={3} className="w-full rounded-lg border border-slate-300 p-2" placeholder="Reason is required" required />
+                    <button className="rounded-lg bg-primary px-3 py-2 font-semibold text-white transition hover:bg-slate-800">Reject Ticket Slip</button>
                   </AsyncForm>
                 </div>
               </div>
@@ -626,32 +504,14 @@ export default async function AdminPage({
                       <div className="grid gap-3 md:w-[28rem] md:grid-cols-2">
                         <AsyncForm action={`/api/admin/refunds/${refund.id}/approve`} method="post" redirectTo="/admin?view=pending-refunds" className="space-y-2 rounded-xl border border-slate-200 p-3">
                           <label className="block text-xs font-semibold text-secondary">Approval Comment</label>
-                          <textarea
-                            name="adminComment"
-                            rows={3}
-                            className="w-full rounded-lg border border-slate-300 p-2"
-                            placeholder="Optional approval note"
-                          />
-                          <button className="rounded-lg bg-accent px-3 py-2 font-semibold text-white transition hover:bg-emerald-600">
-                            Approve Refund
-                          </button>
+                          <textarea name="adminComment" rows={3} className="w-full rounded-lg border border-slate-300 p-2" placeholder="Optional approval note" />
+                          <button className="rounded-lg bg-accent px-3 py-2 font-semibold text-white transition hover:bg-emerald-600">Approve Refund</button>
                         </AsyncForm>
 
                         <AsyncForm action={`/api/admin/refunds/${refund.id}/reject`} method="post" redirectTo="/admin?view=pending-refunds" className="space-y-2 rounded-xl border border-slate-200 p-3">
                           <label className="block text-xs font-semibold text-secondary">Rejection Reason</label>
-                          <textarea
-                            name="adminComment"
-                            rows={3}
-                            className="w-full rounded-lg border border-slate-300 p-2"
-                            placeholder="Reason is required"
-                            required
-                          />
-                          <button
-                            className="rounded-lg px-3 py-2 font-semibold text-white transition hover:bg-red-700"
-                            style={{ backgroundColor: "var(--delete)" }}
-                          >
-                            Reject Refund
-                          </button>
+                          <textarea name="adminComment" rows={3} className="w-full rounded-lg border border-slate-300 p-2" placeholder="Reason is required" required />
+                          <button className="rounded-lg px-3 py-2 font-semibold text-white transition hover:bg-red-700" style={{ backgroundColor: "var(--delete)" }}>Reject Refund</button>
                         </AsyncForm>
                       </div>
                     </div>
@@ -668,9 +528,7 @@ export default async function AdminPage({
       {activeView === "review-history" && (
         <div className="space-y-6">
           {!supportsReviewHistory ? (
-            <p className="surface-card p-4 text-sm text-secondary">
-              Review history is not available yet because this database is still using the older admin approval schema.
-            </p>
+            <p className="surface-card p-4 text-sm text-secondary">Review history is not available yet because this database is still using the older admin approval schema.</p>
           ) : null}
 
           <div>
