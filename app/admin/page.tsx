@@ -1,6 +1,9 @@
+import ReviewReports, { type ReviewReportRow } from "@/components/admin/review-reports";
+import { getSessionUser } from "@/lib/server-auth";
 import Link from "next/link";
 import { getSessionUser } from "@/lib/server-auth";
 import { prisma } from "@/lib/prisma";
+import { Prisma } from "@prisma/client";
 import { AsyncForm } from "@/components/ui/async-form";
 import { ApprovalMetrics } from "@/components/approval-metrics";
 
@@ -40,6 +43,10 @@ type MetricReviewItem = {
   reviewStatus: string;
   reviewedAt: Date | null;
 };
+
+type EventWithCreator = Prisma.EventGetPayload<{ include: { createdBy: true } }>;
+type TicketWithEventUser = Prisma.TicketGetPayload<{ include: { event: true; user: true } }>;
+type EventReviewWithEventUser = Prisma.EventReviewGetPayload<{ include: { event: true; user: true } }>;
 
 const VIEWS: Array<{ id: AdminView; label: string }> = [
   { id: "pending-events", label: "Pending Event Approvals" },
@@ -82,6 +89,8 @@ async function loadAdminData(activeView: AdminView) {
   let metricEvents: MetricReviewItem[] = [];
   let metricTickets: MetricReviewItem[] = [];
 
+  let events: EventWithCreator[];
+  let reviewedEvents: EventWithCreator[];
   try {
     metricEvents = (await prisma.event.findMany({
       where: { deleted: false },
@@ -127,6 +136,13 @@ async function loadAdminData(activeView: AdminView) {
         where: { deleted: false },
         select: { createdAt: true, approved: true },
         orderBy: { createdAt: "desc" }
+      }),
+      Promise.resolve([] as EventWithCreator[])
+    ]);
+  }
+
+  let tickets: TicketWithEventUser[];
+  let reviewedTickets: TicketWithEventUser[];
       })
     ).map((event) => ({
       createdAt: event.createdAt,
@@ -192,6 +208,24 @@ async function loadAdminData(activeView: AdminView) {
       await prisma.ticket.findMany({
         select: { createdAt: true, approved: true },
         orderBy: { createdAt: "desc" }
+      }),
+      Promise.resolve([] as TicketWithEventUser[])
+    ]);
+  }
+
+  let pendingReviews: EventReviewWithEventUser[];
+  let reviewedEventReviews: EventReviewWithEventUser[];
+  try {
+    [pendingReviews, reviewedEventReviews] = await Promise.all([
+      prisma.eventReview.findMany({
+        where: { moderationStatus: "PENDING" },
+        include: { event: true, user: true },
+        orderBy: { createdAt: "desc" }
+      }),
+      prisma.eventReview.findMany({
+        where: { moderationStatus: { not: "PENDING" } },
+        include: { event: true, user: true },
+        orderBy: { moderatedAt: "desc" }
       })
     ).map((ticket) => ({
       createdAt: ticket.createdAt,
@@ -368,6 +402,23 @@ export default async function AdminPage({
     supportsReviewHistory
   } = data;
 
+  const reviewReportRows: ReviewReportRow[] = [...pendingReviews, ...reviewedEventReviews]
+    .map((review): ReviewReportRow => ({
+      id: review.id,
+      eventId: review.eventId,
+      eventName: review.event.name,
+      eventCategory: review.event.category as ReviewCategory,
+      userName: review.anonymous ? "Anonymous" : review.user.name,
+      userId: review.userId,
+      rating: review.rating,
+      comment: review.comment,
+      anonymous: review.anonymous,
+      moderationStatus: review.moderationStatus,
+      adminComment: review.adminComment,
+      createdAt: review.createdAt.toISOString(),
+      moderatedAt: review.moderatedAt ? review.moderatedAt.toISOString() : null
+    }))
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   const allEventsForMetrics = metricEvents;
   const allTicketsForMetrics = metricTickets;
   const totalReviewedItems = reviewedEventCount + reviewedTicketCount + reviewedRefundCount;
@@ -376,6 +427,29 @@ export default async function AdminPage({
     <section className="space-y-8">
       <h1 className="page-title">Admin Dashboard</h1>
 
+      {/* Approval Metrics */}
+      <ApprovalMetrics events={events} tickets={tickets} />
+
+      <div className="grid gap-4 md:grid-cols-4">
+        <div className="surface-card p-4 rounded-lg border border-slate-200">
+          <p className="text-xs font-semibold uppercase text-secondary">Pending Events</p>
+          <p className="mt-2 text-2xl font-bold text-primary">{events.length}</p>
+        </div>
+        <div className="surface-card p-4 rounded-lg border border-slate-200">
+          <p className="text-xs font-semibold uppercase text-secondary">Pending Tickets</p>
+          <p className="mt-2 text-2xl font-bold text-primary">{tickets.length}</p>
+        </div>
+        <div className="surface-card p-4 rounded-lg border border-slate-200">
+          <p className="text-xs font-semibold uppercase text-secondary">Published Events</p>
+          <p className="mt-2 text-2xl font-bold text-primary">{publishedEvents.length}</p>
+        </div>
+        <div className="surface-card p-4 rounded-lg border border-slate-200">
+          <p className="text-xs font-semibold uppercase text-secondary">Reviewed Items</p>
+          <p className="mt-2 text-2xl font-bold text-primary">
+            {reviewedEvents.length + reviewedTickets.length + reviewedEventReviews.length}
+          </p>
+        </div>
+      </div>
       <ApprovalMetrics events={allEventsForMetrics} tickets={allTicketsForMetrics} />
 
       <div className="flex flex-wrap gap-2">
