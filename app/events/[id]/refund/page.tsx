@@ -129,6 +129,11 @@ export default function RefundRequestPage() {
     [subtotal, serviceFee, cancellationFee]
   );
 
+  const displayEventName = data?.eventName || selectedTicketItems[0]?.eventName || tickets[0]?.eventName || "Event";
+  const displayEventDate = data?.eventDate || "Date will be confirmed";
+  const displayEventVenue = data?.eventVenue || "Venue will be confirmed";
+  const displayEventImage = data?.eventImage;
+
   function toggleTicket(id: string) {
     setSelectedTickets((current) =>
       current.includes(id)
@@ -426,24 +431,24 @@ export default function RefundRequestPage() {
             </section>
 
             <section className="surface-card overflow-hidden p-0">
-              {data?.eventImage ? (
+              {displayEventImage ? (
                 <img
-                  src={data.eventImage}
-                  alt={data.eventName}
-                  className="h-40 w-full object-cover"
+                src={displayEventImage}
+                alt={displayEventName}
+                className="h-40 w-full object-cover"
                 />
               ) : (
                 <div className="h-40 w-full bg-gradient-to-br from-slate-900 via-slate-700 to-emerald-500" />
-              )}
+                  ) }
 
-              <div className="p-4">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-secondary">
-                  Event Details
-                </p>
-                <p className="mt-2 text-sm font-bold text-primary">{data?.eventName}</p>
-                <p className="mt-1 text-xs text-secondary">{data?.eventDate}</p>
-                <p className="mt-1 text-xs text-secondary">{data?.eventVenue}</p>
-              </div>
+                <div className="p-4">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-secondary"> 
+                    Event Details
+                  </p>
+                  <p className="mt-2 text-sm font-bold text-primary">{displayEventName}</p>
+                  <p className="mt-1 text-xs text-secondary">{displayEventDate}</p>
+                  <p className="mt-1 text-xs text-secondary">{displayEventVenue}</p>
+                </div>
             </section>
           </aside>
         </div>
