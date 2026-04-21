@@ -169,7 +169,7 @@ export function ProfileForm() {
       </div>
 
       <div>
-        <label className="label-text">IT Number</label>
+        <label className="label-text">Student Identification Number</label>
         <input className="input-field" value={itNumber} onChange={(e) => setItNumber(e.target.value.toUpperCase())} required />
       </div>
 
