@@ -3,8 +3,10 @@ import { getSessionUser } from "@/lib/server-auth";
 import { prisma } from "@/lib/prisma";
 import { AsyncForm } from "@/components/ui/async-form";
 import { ApprovalMetrics } from "@/components/approval-metrics";
+import { ApprovalFilterSection } from "@/components/approval-filter-section";
 
 type AdminView =
+  | "pending-approvals"
   | "pending-events"
   | "published-events"
   | "cancelled-events"
@@ -49,6 +51,7 @@ type RefundRequest = {
 };
 
 const VIEWS: Array<{ id: AdminView; label: string }> = [
+  { id: "pending-approvals", label: "All Pending Approvals" },
   { id: "pending-events", label: "Pending Event Approvals" },
   { id: "published-events", label: "Published Events" },
   { id: "cancelled-events", label: "Cancelled Events" },
@@ -134,7 +137,7 @@ async function loadAdminData(activeView: AdminView) {
       eventReviewPairs as unknown as Array<{ createdAt: Date; reviewedAt: Date | null }>
     );
 
-    if (activeView === "pending-events") {
+    if (activeView === "pending-events" || activeView === "pending-approvals") {
       events.push(
         ...(await prisma.event.findMany({
           where: { deleted: false, reviewStatus: "PENDING" } as any,
@@ -164,10 +167,14 @@ async function loadAdminData(activeView: AdminView) {
       prisma.event.count({ where: { deleted: false, approved: true } })
     ]);
 
+<<<<<<< HEAD
     totalEventItems = legacyEventTotalCount;
     eventApprovals = legacyApprovedEventCount;
     pendingEventCount = Math.max(0, legacyEventTotalCount - legacyApprovedEventCount);
     if (activeView === "pending-events") {
+=======
+    if (activeView === "pending-events" || activeView === "pending-approvals") {
+>>>>>>> 27851e9 (Integrate refund flow with real tickets and improve admin approval module)
       events.push(
         ...(await prisma.event.findMany({
           where: { deleted: false, approved: false },
@@ -208,7 +215,7 @@ async function loadAdminData(activeView: AdminView) {
       ticketReviewPairs as unknown as Array<{ createdAt: Date; reviewedAt: Date | null }>
     );
 
-    if (activeView === "pending-tickets") {
+    if (activeView === "pending-tickets" || activeView === "pending-approvals") {
       tickets.push(
         ...(await prisma.ticket.findMany({
           where: { reviewStatus: "PENDING" } as any,
@@ -238,10 +245,14 @@ async function loadAdminData(activeView: AdminView) {
       prisma.ticket.count({ where: { approved: true } })
     ]);
 
+<<<<<<< HEAD
     totalTicketItems = legacyTicketTotalCount;
     ticketApprovals = legacyApprovedTicketCount;
     pendingTicketCount = Math.max(0, legacyTicketTotalCount - legacyApprovedTicketCount);
     if (activeView === "pending-tickets") {
+=======
+    if (activeView === "pending-tickets" || activeView === "pending-approvals") {
+>>>>>>> 27851e9 (Integrate refund flow with real tickets and improve admin approval module)
       tickets.push(
         ...(await prisma.ticket.findMany({
           where: { approved: false },
@@ -364,7 +375,7 @@ export default async function AdminPage({
 
   const activeView: AdminView = VIEWS.some((v) => v.id === searchParams?.view)
     ? (searchParams?.view as AdminView)
-    : "pending-events";
+    : "pending-approvals";
 
   let data;
   try {
@@ -426,6 +437,13 @@ export default async function AdminPage({
           </Link>
         ))}
       </div>
+
+      {activeView === "pending-approvals" && (
+        <div>
+          <h2 className="mb-4 text-xl font-semibold text-primary">Pending Approvals - Events & Tickets</h2>
+          <ApprovalFilterSection events={events} tickets={tickets} />
+        </div>
+      )}
 
       {activeView === "pending-events" && (
         <div>

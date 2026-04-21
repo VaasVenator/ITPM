@@ -33,12 +33,14 @@ type TicketItem = {
   reference: string;
   price: number;
   refundable: boolean;
+  createdAt?: string;
+  eventName?: string;
 };
 
 const REFUND_REASONS = [
   { id: "change-of-plans", label: "Change of Plans" },
   { id: "emergency", label: "Emergency" },
-  { id: "dissatisfied", label: "Dissatisfied" }
+  { id: "dissatisfied", label: "Dissatisfied" },
 ] as const;
 
 function money(value: number) {
@@ -51,12 +53,47 @@ export default function RefundRequestPage() {
 
   const [loaded, setLoaded] = useState(false);
   const [data, setData] = useState<CompletionData | null>(null);
+  const [tickets, setTickets] = useState<TicketItem[]>([]);
+  const [loadingTickets, setLoadingTickets] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
   const [selectedTickets, setSelectedTickets] = useState<string[]>([]);
   const [selectedReason, setSelectedReason] = useState<string>("change-of-plans");
   const [notes, setNotes] = useState("");
   const [error, setError] = useState("");
 
   useEffect(() => {
+    let active = true;
+
+    async function loadRefundableTickets() {
+      try {
+        setLoadingTickets(true);
+
+        const res = await fetch(`/api/events/${params.id}/my-tickets`, {
+          method: "GET",
+          cache: "no-store",
+        });
+
+        const result = await res.json();
+
+        if (!res.ok) {
+          throw new Error(result.error || "Failed to load tickets");
+        }
+
+        if (active) {
+          setTickets(result.tickets || []);
+        }
+      } catch (err) {
+        console.error(err);
+        if (active) {
+          setTickets([]);
+        }
+      } finally {
+        if (active) {
+          setLoadingTickets(false);
+        }
+      }
+    }
+
     const stored = sessionStorage.getItem(`payment-complete-${params.id}`);
 
     if (stored) {
@@ -67,40 +104,13 @@ export default function RefundRequestPage() {
       }
     }
 
+    void loadRefundableTickets();
     setLoaded(true);
-  }, [params.id]);
 
-  const tickets = useMemo<TicketItem[]>(() => {
-    if (!data) return [];
-
-    const items: TicketItem[] = [];
-    let counter = 1;
-
-    const addTickets = (
-      count: number,
-      label: string,
-      tier: string,
-      price: number
-    ) => {
-      for (let i = 0; i < count; i += 1) {
-        items.push({
-          id: `${label.toLowerCase().replace(/\s+/g, "-")}-${counter}`,
-          label,
-          tier,
-          reference: `Ticket ID: #NX-${params.id.toUpperCase().slice(0, 6)}-${String(counter).padStart(3, "0")}`,
-          price,
-          refundable: true
-        });
-        counter += 1;
-      }
+    return () => {
+      active = false;
     };
-
-    addTickets(data.earlyBirdQty, "Early Bird", "Tier 1", 1500);
-    addTickets(data.standardQty, "Standard Access", "Tier 1", 2500);
-    addTickets(data.executiveVipQty, "Executive VIP", "Tier 1", 5000);
-
-    return items;
-  }, [data, params.id]);
+  }, [params.id]);
 
   const selectedTicketItems = useMemo(
     () => tickets.filter((ticket) => selectedTickets.includes(ticket.id)),
@@ -127,7 +137,7 @@ export default function RefundRequestPage() {
     );
   }
 
-  function handleConfirmCancellation() {
+  async function handleConfirmCancellation() {
     setError("");
 
     if (selectedTickets.length === 0) {
@@ -135,26 +145,58 @@ export default function RefundRequestPage() {
       return;
     }
 
-    sessionStorage.setItem(
-      `refund-request-${params.id}`,
-      JSON.stringify({
-        eventId: params.id,
-        eventName: data?.eventName,
-        reason: selectedReason,
-        notes,
-        tickets: selectedTicketItems,
-        subtotal,
-        serviceFee,
-        cancellationFee,
-        estimatedRefund,
-        requestedAt: new Date().toISOString()
-      })
-    );
+    try {
+      setSubmitting(true);
 
-    router.push(`/events/${params.id}/refund/status`);
+      const requests = selectedTicketItems.map(async (ticket) => {
+        const formData = new FormData();
+        formData.append("ticketId", ticket.id);
+        formData.append("reason", notes.trim() || selectedReason);
+
+        const response = await fetch("/api/refunds/request", {
+          method: "POST",
+          body: formData,
+        });
+
+        const result = await response.json();
+
+        if (!response.ok) {
+          throw new Error(result.error || "Failed to submit refund request");
+        }
+
+        return result;
+      });
+
+      const submittedRefunds = await Promise.all(requests);
+
+      sessionStorage.setItem(
+        `refund-request-${params.id}`,
+        JSON.stringify({
+          eventId: params.id,
+          eventName: data?.eventName ?? selectedTicketItems[0]?.eventName ?? "Event",
+          reason: selectedReason,
+          notes,
+          tickets: selectedTicketItems,
+          subtotal,
+          serviceFee,
+          cancellationFee,
+          estimatedRefund,
+          requestedAt: new Date().toISOString(),
+          submittedRefunds,
+        })
+      );
+
+      router.push(`/events/${params.id}/refund/status`);
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Failed to submit refund request."
+      );
+    } finally {
+      setSubmitting(false);
+    }
   }
 
-  if (!loaded) {
+  if (!loaded || loadingTickets) {
     return (
       <main className="mx-auto max-w-7xl px-4 py-8">
         <section className="surface-card p-6">
@@ -164,13 +206,13 @@ export default function RefundRequestPage() {
     );
   }
 
-  if (!data) {
+  if (!data && tickets.length === 0) {
     return (
       <main className="mx-auto max-w-7xl px-4 py-8">
         <section className="surface-card p-6">
           <h1 className="text-xl font-black text-primary">Request Refund/Cancellation</h1>
           <p className="mt-3 text-sm text-secondary">
-            No payment record was found for this event. Complete a payment first before requesting a cancellation.
+            No refundable tickets were found for this event.
           </p>
 
           <div className="mt-5">
@@ -227,7 +269,9 @@ export default function RefundRequestPage() {
               </div>
 
               <div className="mt-5 space-y-3">
-                {tickets.length > 0 ? (
+                {loadingTickets ? (
+                  <p className="text-sm text-secondary">Loading purchased tickets...</p>
+                ) : tickets.length > 0 ? (
                   tickets.map((ticket) => {
                     const checked = selectedTickets.includes(ticket.id);
 
@@ -271,7 +315,9 @@ export default function RefundRequestPage() {
                     );
                   })
                 ) : (
-                  <p className="text-sm text-secondary">No purchased tickets available for refund.</p>
+                  <p className="text-sm text-secondary">
+                    No approved purchased tickets are available for refund.
+                  </p>
                 )}
               </div>
             </section>
@@ -330,9 +376,10 @@ export default function RefundRequestPage() {
                 <button
                   type="button"
                   onClick={handleConfirmCancellation}
-                  className="inline-flex items-center justify-center rounded-xl bg-primary px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
+                  disabled={submitting || selectedTickets.length === 0}
+                  className="inline-flex items-center justify-center rounded-xl bg-primary px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  Confirm Cancellation
+                  {submitting ? "Submitting..." : "Confirm Refund Request"}
                 </button>
               </div>
             </section>
@@ -379,7 +426,7 @@ export default function RefundRequestPage() {
             </section>
 
             <section className="surface-card overflow-hidden p-0">
-              {data.eventImage ? (
+              {data?.eventImage ? (
                 <img
                   src={data.eventImage}
                   alt={data.eventName}
@@ -393,9 +440,9 @@ export default function RefundRequestPage() {
                 <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-secondary">
                   Event Details
                 </p>
-                <p className="mt-2 text-sm font-bold text-primary">{data.eventName}</p>
-                <p className="mt-1 text-xs text-secondary">{data.eventDate}</p>
-                <p className="mt-1 text-xs text-secondary">{data.eventVenue}</p>
+                <p className="mt-2 text-sm font-bold text-primary">{data?.eventName}</p>
+                <p className="mt-1 text-xs text-secondary">{data?.eventDate}</p>
+                <p className="mt-1 text-xs text-secondary">{data?.eventVenue}</p>
               </div>
             </section>
           </aside>

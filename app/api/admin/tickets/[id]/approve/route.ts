@@ -31,6 +31,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     const updatedTicket = await prisma.ticket.update({
       where: { id: params.id },
       data: {
+        approved: true,
         reviewStatus: "APPROVED",
         adminComment: adminComment || "Approved by admin",
         reviewedAt: new Date()

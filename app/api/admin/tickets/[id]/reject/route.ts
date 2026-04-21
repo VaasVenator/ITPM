@@ -37,6 +37,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     await prisma.ticket.update({
       where: { id: params.id },
       data: {
+        approved: false,
         reviewStatus: "REJECTED",
         adminComment,
         reviewedAt: new Date()

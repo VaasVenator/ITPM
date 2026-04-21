@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/server-auth";
 import { prisma } from "@/lib/prisma";
 
-export async function GET(req: Request) {
+export async function GET(_req: Request) {
   const user = await getSessionUser();
 
   if (!user || user.role !== "admin") {
@@ -10,6 +10,8 @@ export async function GET(req: Request) {
   }
 
   try {
+    const refundRequestModel = (prisma as any).refundRequest;
+
     const [
       events,
       tickets,
@@ -18,6 +20,8 @@ export async function GET(req: Request) {
       deletedEvents,
       reviewedEvents,
       reviewedTickets,
+      pendingRefunds,
+      reviewedRefunds,
     ] = await Promise.all([
       prisma.event.findMany({
         where: { deleted: false, reviewStatus: "PENDING" },
@@ -54,6 +58,20 @@ export async function GET(req: Request) {
         include: { event: true, user: true },
         orderBy: { reviewedAt: "desc" },
       }),
+      refundRequestModel
+        ? refundRequestModel.findMany({
+            where: { status: "PENDING" },
+            include: { user: true, ticket: { include: { event: true } } },
+            orderBy: { createdAt: "desc" },
+          })
+        : [],
+      refundRequestModel
+        ? refundRequestModel.findMany({
+            where: { status: { not: "PENDING" } },
+            include: { user: true, ticket: { include: { event: true } } },
+            orderBy: { reviewedAt: "desc" },
+          })
+        : [],
     ]);
 
     return NextResponse.json({
@@ -64,6 +82,8 @@ export async function GET(req: Request) {
       deletedEvents,
       reviewedEvents,
       reviewedTickets,
+      pendingRefunds,
+      reviewedRefunds,
     });
   } catch (error) {
     console.error("Error fetching admin data:", error);

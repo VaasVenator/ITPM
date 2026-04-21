@@ -236,6 +236,7 @@ interface SearchFilterProps {
   filterCategory?: string;
   onFilterChange?: (category: string) => void;
   categories?: string[];
+  placeholder?: string;
 }
 
 export function SearchFilter({
@@ -244,6 +245,7 @@ export function SearchFilter({
   filterCategory,
   onFilterChange,
   categories = [],
+  placeholder = "Type to search...",
 }: SearchFilterProps) {
   return (
     <div className="flex flex-col gap-3 md:flex-row md:items-end mb-4">
@@ -255,7 +257,7 @@ export function SearchFilter({
           type="text"
           value={searchTerm}
           onChange={(e) => onSearchChange(e.target.value)}
-          placeholder="Type to search..."
+          placeholder={placeholder}
           className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-emerald-100 outline-none"
         />
       </div>

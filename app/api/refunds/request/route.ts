@@ -40,6 +40,13 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
+    if (ticket.reviewStatus !== "APPROVED") {
+      return NextResponse.json(
+        { error: "Only approved tickets can be refunded" },
+        { status: 400 }
+      );
+    }
+
     // Check if a refund request already exists for this ticket
     const existingRefund = await refundRequestModel.findFirst({
       where: {
