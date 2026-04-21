@@ -170,6 +170,7 @@ async function loadAdminData(activeView: AdminView) {
     totalEventItems = legacyEventTotalCount;
     eventApprovals = legacyApprovedEventCount;
     pendingEventCount = Math.max(0, legacyEventTotalCount - legacyApprovedEventCount);
+
     if (activeView === "pending-events" || activeView === "pending-approvals") {
       events.push(
         ...(await prisma.event.findMany({
@@ -244,6 +245,7 @@ async function loadAdminData(activeView: AdminView) {
     totalTicketItems = legacyTicketTotalCount;
     ticketApprovals = legacyApprovedTicketCount;
     pendingTicketCount = Math.max(0, legacyTicketTotalCount - legacyApprovedTicketCount);
+
     if (activeView === "pending-tickets" || activeView === "pending-approvals") {
       tickets.push(
         ...(await prisma.ticket.findMany({
@@ -258,9 +260,11 @@ async function loadAdminData(activeView: AdminView) {
   const totalApproved = eventApprovals + ticketApprovals;
   const totalPending = pendingEventCount + pendingTicketCount;
   const totalItems = totalEventItems + totalTicketItems;
+
   const completedReviewPairs = reviewPairs.filter(
     (item): item is { createdAt: Date; reviewedAt: Date } => Boolean(item.reviewedAt)
   );
+
   const averageReviewTime =
     completedReviewPairs.length === 0
       ? 0
@@ -408,6 +412,26 @@ export default async function AdminPage({
     supportsReviewHistory
   } = data;
 
+  const plainTickets = tickets.map((ticket) => ({
+    ...ticket,
+    price: Number(ticket.price),
+    reviewedAt: ticket.reviewedAt ? new Date(ticket.reviewedAt).toISOString() : null,
+    createdAt: ticket.createdAt ? new Date(ticket.createdAt).toISOString() : null,
+    event: ticket.event
+      ? {
+          ...ticket.event,
+          date: ticket.event.date ? new Date(ticket.event.date).toISOString() : null,
+          createdAt: ticket.event.createdAt ? new Date(ticket.event.createdAt).toISOString() : null
+        }
+      : ticket.event,
+    user: ticket.user
+      ? {
+          ...ticket.user,
+          createdAt: ticket.user.createdAt ? new Date(ticket.user.createdAt).toISOString() : null
+        }
+      : ticket.user
+  }));
+
   return (
     <section className="space-y-8">
       <h1 className="page-title">Admin Dashboard</h1>
@@ -432,8 +456,8 @@ export default async function AdminPage({
 
       {activeView === "pending-approvals" && (
         <div>
-          <h2 className="mb-4 text-xl font-semibold text-primary">Pending Approvals - Events & Tickets</h2>
-          <ApprovalFilterSection events={events} tickets={tickets} />
+          <h2 className="mb-4 text-xl font-semibold text-primary">All Pending Approvals</h2>
+          <ApprovalFilterSection events={events} tickets={plainTickets} />
         </div>
       )}
 
@@ -462,7 +486,9 @@ export default async function AdminPage({
                     <p className="mt-1 text-secondary">Category: {event.category}</p>
                     <p className="text-secondary">Date & Time: {new Date(event.date).toLocaleString()}</p>
                     <p className="text-secondary">Location: {event.location}</p>
-                    <p className="mt-2 text-secondary">Description: {event.description || "N/A"}</p>
+                    <p className="mt-2 text-secondary">
+                      Description: {event.description || "No description provided"}
+                    </p>
                     <p className="mt-2 text-secondary">Ticket Required: {event.ticketRequired ? "Yes" : "No"}</p>
                     <p className="text-secondary">Submitted At: {new Date(event.createdAt).toLocaleString()}</p>
                   </div>
@@ -481,21 +507,46 @@ export default async function AdminPage({
                 </div>
 
                 <div className="mt-4 grid gap-3 md:grid-cols-2">
-                  <AsyncForm action={`/api/admin/events/${event.id}/approve`} method="post" className="space-y-2 rounded-xl border border-slate-200 p-3">
+                  <AsyncForm
+                    action={`/api/admin/events/${event.id}/approve`}
+                    method="post"
+                    className="space-y-2 rounded-xl border border-slate-200 p-3"
+                  >
                     <label className="block text-xs font-semibold text-secondary">Approval Comment</label>
-                    <textarea name="adminComment" rows={3} className="w-full rounded-lg border border-slate-300 p-2" placeholder="Optional approval note" />
-                    <button className="rounded-lg bg-accent px-3 py-2 font-semibold text-white transition hover:bg-emerald-600">Approve Event</button>
+                    <textarea
+                      name="adminComment"
+                      rows={3}
+                      className="w-full rounded-lg border border-slate-300 p-2"
+                      placeholder="Optional approval note"
+                    />
+                    <button className="rounded-lg bg-accent px-3 py-2 font-semibold text-white transition hover:bg-emerald-600">
+                      Approve
+                    </button>
                   </AsyncForm>
 
-                  <AsyncForm action={`/api/admin/events/${event.id}/reject`} method="post" className="space-y-2 rounded-xl border border-slate-200 p-3">
+                  <AsyncForm
+                    action={`/api/admin/events/${event.id}/reject`}
+                    method="post"
+                    className="space-y-2 rounded-xl border border-slate-200 p-3"
+                  >
                     <label className="block text-xs font-semibold text-secondary">Rejection Reason</label>
-                    <textarea name="adminComment" rows={3} className="w-full rounded-lg border border-slate-300 p-2" placeholder="Reason is required" required />
-                    <button className="rounded-lg bg-primary px-3 py-2 font-semibold text-white transition hover:bg-slate-800">Reject Event</button>
+                    <textarea
+                      name="adminComment"
+                      rows={3}
+                      className="w-full rounded-lg border border-slate-300 p-2"
+                      placeholder="Reason is required"
+                      required
+                    />
+                    <button className="rounded-lg bg-primary px-3 py-2 font-semibold text-white transition hover:bg-slate-800">
+                      Reject
+                    </button>
                   </AsyncForm>
                 </div>
               </div>
             ))}
-            {events.length === 0 ? <p className="surface-card p-4 text-sm text-secondary">No pending events.</p> : null}
+            {events.length === 0 ? (
+              <p className="surface-card p-4 text-sm text-secondary">No pending events.</p>
+            ) : null}
           </div>
         </div>
       )}
@@ -506,33 +557,68 @@ export default async function AdminPage({
           <div className="space-y-3">
             {tickets.map((ticket) => (
               <div key={ticket.id} className="surface-card p-4 text-sm">
-                <p className="font-semibold text-primary">{ticket.user.name} • {ticket.event.name}</p>
+                <p className="font-semibold text-primary">
+                  {ticket.user.name} • {ticket.event.name}
+                </p>
                 <p className="mt-1 text-secondary">Quantity: {parseTicketQuantity(ticket.notes)}</p>
                 <p className="text-secondary">Amount per ticket: LKR {Number(ticket.price).toFixed(2)}</p>
-                <p className="text-secondary">Total amount: LKR {(Number(ticket.price) * parseTicketQuantity(ticket.notes)).toFixed(2)}</p>
+                <p className="text-secondary">
+                  Total amount: LKR {(Number(ticket.price) * parseTicketQuantity(ticket.notes)).toFixed(2)}
+                </p>
 
                 {ticket.paymentSlip.startsWith("data:image/") ? (
-                  <img src={ticket.paymentSlip} alt={`Bank slip for ${ticket.user.name}`} className="mt-2 h-56 w-full rounded-xl border border-slate-200 bg-white object-contain" />
+                  <img
+                    src={ticket.paymentSlip}
+                    alt={`Bank slip for ${ticket.user.name}`}
+                    className="mt-2 h-56 w-full rounded-xl border border-slate-200 bg-white object-contain"
+                  />
                 ) : (
                   <p className="mt-1 break-all text-secondary">Slip: {ticket.paymentSlip}</p>
                 )}
 
                 <div className="mt-4 grid gap-3 md:grid-cols-2">
-                  <AsyncForm action={`/api/admin/tickets/${ticket.id}/approve`} method="post" redirectTo="/admin?view=pending-tickets" className="space-y-2 rounded-xl border border-slate-200 p-3">
+                  <AsyncForm
+                    action={`/api/admin/tickets/${ticket.id}/approve`}
+                    method="post"
+                    redirectTo="/admin?view=pending-tickets"
+                    className="space-y-2 rounded-xl border border-slate-200 p-3"
+                  >
                     <label className="block text-xs font-semibold text-secondary">Approval Comment</label>
-                    <textarea name="adminComment" rows={3} className="w-full rounded-lg border border-slate-300 p-2" placeholder="Optional approval note" />
-                    <button className="rounded-lg bg-accent px-3 py-2 font-semibold text-white transition hover:bg-emerald-600">Approve Ticket Slip</button>
+                    <textarea
+                      name="adminComment"
+                      rows={3}
+                      className="w-full rounded-lg border border-slate-300 p-2"
+                      placeholder="Optional approval note"
+                    />
+                    <button className="rounded-lg bg-accent px-3 py-2 font-semibold text-white transition hover:bg-emerald-600">
+                      Approve
+                    </button>
                   </AsyncForm>
 
-                  <AsyncForm action={`/api/admin/tickets/${ticket.id}/reject`} method="post" redirectTo="/admin?view=pending-tickets" className="space-y-2 rounded-xl border border-slate-200 p-3">
+                  <AsyncForm
+                    action={`/api/admin/tickets/${ticket.id}/reject`}
+                    method="post"
+                    redirectTo="/admin?view=pending-tickets"
+                    className="space-y-2 rounded-xl border border-slate-200 p-3"
+                  >
                     <label className="block text-xs font-semibold text-secondary">Rejection Reason</label>
-                    <textarea name="adminComment" rows={3} className="w-full rounded-lg border border-slate-300 p-2" placeholder="Reason is required" required />
-                    <button className="rounded-lg bg-primary px-3 py-2 font-semibold text-white transition hover:bg-slate-800">Reject Ticket Slip</button>
+                    <textarea
+                      name="adminComment"
+                      rows={3}
+                      className="w-full rounded-lg border border-slate-300 p-2"
+                      placeholder="Reason is required"
+                      required
+                    />
+                    <button className="rounded-lg bg-primary px-3 py-2 font-semibold text-white transition hover:bg-slate-800">
+                      Reject
+                    </button>
                   </AsyncForm>
                 </div>
               </div>
             ))}
-            {tickets.length === 0 ? <p className="surface-card p-4 text-sm text-secondary">No pending ticket approvals.</p> : null}
+            {tickets.length === 0 ? (
+              <p className="surface-card p-4 text-sm text-secondary">No pending ticket slips.</p>
+            ) : null}
           </div>
         </div>
       )}
@@ -541,7 +627,9 @@ export default async function AdminPage({
         <div className="space-y-4">
           <h2 className="mb-3 text-xl font-semibold text-primary">Pending Refund Requests</h2>
           {!supportsRefunds ? (
-            <p className="surface-card p-4 text-sm text-secondary">Refund requests are not available in this database yet.</p>
+            <p className="surface-card p-4 text-sm text-secondary">
+              Refund requests are not available in this database yet.
+            </p>
           ) : (
             <div className="space-y-3">
               {refunds.length > 0 ? (
@@ -552,28 +640,62 @@ export default async function AdminPage({
                         <p className="font-semibold text-primary">{refund.user.name}</p>
                         <p className="mt-1 text-secondary">Event: {refund.ticket.event.name}</p>
                         <p className="text-secondary">Reason: {refund.reason}</p>
-                        <p className="mt-2 text-lg font-semibold text-primary">Amount: LKR {Number(refund.amount).toFixed(2)}</p>
-                        <p className="mt-1 text-xs text-secondary">Requested: {new Date(refund.createdAt).toLocaleString()}</p>
+                        <p className="mt-2 text-lg font-semibold text-primary">
+                          Refund Amount: LKR {Number(refund.amount).toFixed(2)}
+                        </p>
+                        <p className="mt-1 text-xs text-secondary">
+                          Requested: {new Date(refund.createdAt).toLocaleString()}
+                        </p>
                       </div>
 
                       <div className="grid gap-3 md:w-[28rem] md:grid-cols-2">
-                        <AsyncForm action={`/api/admin/refunds/${refund.id}/approve`} method="post" redirectTo="/admin?view=pending-refunds" className="space-y-2 rounded-xl border border-slate-200 p-3">
+                        <AsyncForm
+                          action={`/api/admin/refunds/${refund.id}/approve`}
+                          method="post"
+                          redirectTo="/admin?view=pending-refunds"
+                          className="space-y-2 rounded-xl border border-slate-200 p-3"
+                        >
                           <label className="block text-xs font-semibold text-secondary">Approval Comment</label>
-                          <textarea name="adminComment" rows={3} className="w-full rounded-lg border border-slate-300 p-2" placeholder="Optional approval note" />
-                          <button className="rounded-lg bg-accent px-3 py-2 font-semibold text-white transition hover:bg-emerald-600">Approve Refund</button>
+                          <textarea
+                            name="adminComment"
+                            rows={3}
+                            className="w-full rounded-lg border border-slate-300 p-2"
+                            placeholder="Optional approval note"
+                          />
+                          <button className="rounded-lg bg-accent px-3 py-2 font-semibold text-white transition hover:bg-emerald-600">
+                            Approve
+                          </button>
                         </AsyncForm>
 
-                        <AsyncForm action={`/api/admin/refunds/${refund.id}/reject`} method="post" redirectTo="/admin?view=pending-refunds" className="space-y-2 rounded-xl border border-slate-200 p-3">
+                        <AsyncForm
+                          action={`/api/admin/refunds/${refund.id}/reject`}
+                          method="post"
+                          redirectTo="/admin?view=pending-refunds"
+                          className="space-y-2 rounded-xl border border-slate-200 p-3"
+                        >
                           <label className="block text-xs font-semibold text-secondary">Rejection Reason</label>
-                          <textarea name="adminComment" rows={3} className="w-full rounded-lg border border-slate-300 p-2" placeholder="Reason is required" required />
-                          <button className="rounded-lg px-3 py-2 font-semibold text-white transition hover:bg-red-700" style={{ backgroundColor: "var(--delete)" }}>Reject Refund</button>
+                          <textarea
+                            name="adminComment"
+                            rows={3}
+                            className="w-full rounded-lg border border-slate-300 p-2"
+                            placeholder="Reason is required"
+                            required
+                          />
+                          <button
+                            className="rounded-lg px-3 py-2 font-semibold text-white transition hover:bg-red-700"
+                            style={{ backgroundColor: "var(--delete)" }}
+                          >
+                            Reject
+                          </button>
                         </AsyncForm>
                       </div>
                     </div>
                   </div>
                 ))
               ) : (
-                <div className="surface-card rounded-lg p-4 text-center text-sm text-secondary">No pending refund requests.</div>
+                <div className="surface-card rounded-lg p-4 text-center text-sm text-secondary">
+                  No pending refund requests.
+                </div>
               )}
             </div>
           )}
@@ -583,7 +705,9 @@ export default async function AdminPage({
       {activeView === "review-history" && (
         <div className="space-y-6">
           {!supportsReviewHistory ? (
-            <p className="surface-card p-4 text-sm text-secondary">Review history is not available yet because this database is still using the older admin approval schema.</p>
+            <p className="surface-card p-4 text-sm text-secondary">
+              Review history is not available yet because this database is still using the older admin approval schema.
+            </p>
           ) : null}
 
           <div>
@@ -594,11 +718,20 @@ export default async function AdminPage({
                   <p className="font-semibold text-primary">{event.name}</p>
                   <p className="text-secondary">Organiser: {event.createdBy.name}</p>
                   <p className="text-secondary">Status: {String(event.reviewStatus)}</p>
-                  <p className="text-secondary">Comment: {event.adminComment || "N/A"}</p>
-                  <p className="text-secondary">Reviewed At: {event.reviewedAt ? new Date(event.reviewedAt).toLocaleString() : "N/A"}</p>
+                  <p className="text-secondary">
+                    Admin Comment: {event.adminComment || "No comment provided"}
+                  </p>
+                  <p className="text-secondary">
+                    Reviewed At:{" "}
+                    {event.reviewedAt
+                      ? new Date(event.reviewedAt).toLocaleString()
+                      : "Not reviewed yet"}
+                  </p>
                 </div>
               ))}
-              {reviewedEvents.length === 0 ? <p className="surface-card p-4 text-sm text-secondary">No reviewed events yet.</p> : null}
+              {reviewedEvents.length === 0 ? (
+                <p className="surface-card p-4 text-sm text-secondary">No reviewed events yet.</p>
+              ) : null}
             </div>
           </div>
 
@@ -607,31 +740,55 @@ export default async function AdminPage({
             <div className="space-y-3">
               {reviewedTickets.map((ticket) => (
                 <div key={ticket.id} className="surface-card p-4 text-sm">
-                  <p className="font-semibold text-primary">{ticket.user.name} • {ticket.event.name}</p>
+                  <p className="font-semibold text-primary">
+                    {ticket.user.name} • {ticket.event.name}
+                  </p>
                   <p className="text-secondary">Status: {String(ticket.reviewStatus)}</p>
-                  <p className="text-secondary">Comment: {ticket.adminComment || "N/A"}</p>
-                  <p className="text-secondary">Reviewed At: {ticket.reviewedAt ? new Date(ticket.reviewedAt).toLocaleString() : "N/A"}</p>
+                  <p className="text-secondary">
+                    Admin Comment: {ticket.adminComment || "No comment provided"}
+                  </p>
+                  <p className="text-secondary">
+                    Reviewed At:{" "}
+                    {ticket.reviewedAt
+                      ? new Date(ticket.reviewedAt).toLocaleString()
+                      : "Not reviewed yet"}
+                  </p>
                 </div>
               ))}
-              {reviewedTickets.length === 0 ? <p className="surface-card p-4 text-sm text-secondary">No reviewed tickets yet.</p> : null}
+              {reviewedTickets.length === 0 ? (
+                <p className="surface-card p-4 text-sm text-secondary">No reviewed tickets yet.</p>
+              ) : null}
             </div>
           </div>
 
           <div>
             <h2 className="mb-3 text-xl font-semibold text-primary">Reviewed Refunds</h2>
             {!supportsRefunds ? (
-              <p className="surface-card p-4 text-sm text-secondary">Refund review history is not available in this database yet.</p>
+              <p className="surface-card p-4 text-sm text-secondary">
+                Refund review history is not available in this database yet.
+              </p>
             ) : (
               <div className="space-y-3">
                 {reviewedRefunds.map((refund) => (
                   <div key={refund.id} className="surface-card p-4 text-sm">
-                    <p className="font-semibold text-primary">{refund.user.name} • {refund.ticket.event.name}</p>
+                    <p className="font-semibold text-primary">
+                      {refund.user.name} • {refund.ticket.event.name}
+                    </p>
                     <p className="text-secondary">Status: {refund.status}</p>
-                    <p className="text-secondary">Comment: {refund.adminComment || "N/A"}</p>
-                    <p className="text-secondary">Reviewed At: {refund.reviewedAt ? new Date(refund.reviewedAt).toLocaleString() : "N/A"}</p>
+                    <p className="text-secondary">
+                      Admin Comment: {refund.adminComment || "No comment provided"}
+                    </p>
+                    <p className="text-secondary">
+                      Reviewed At:{" "}
+                      {refund.reviewedAt
+                        ? new Date(refund.reviewedAt).toLocaleString()
+                        : "Not reviewed yet"}
+                    </p>
                   </div>
                 ))}
-                {reviewedRefunds.length === 0 ? <p className="surface-card p-4 text-sm text-secondary">No reviewed refunds yet.</p> : null}
+                {reviewedRefunds.length === 0 ? (
+                  <p className="surface-card p-4 text-sm text-secondary">No reviewed refunds yet.</p>
+                ) : null}
               </div>
             )}
           </div>
@@ -645,10 +802,14 @@ export default async function AdminPage({
             {publishedEvents.map((event) => (
               <div key={event.id} className="surface-card p-4 text-sm">
                 <p className="font-semibold text-primary">{event.name}</p>
-                <p className="mt-1 text-secondary">{new Date(event.date).toLocaleString()} • {event.location}</p>
+                <p className="mt-1 text-secondary">
+                  {new Date(event.date).toLocaleString()} • {event.location}
+                </p>
               </div>
             ))}
-            {publishedEvents.length === 0 ? <p className="surface-card p-4 text-sm text-secondary">No published events.</p> : null}
+            {publishedEvents.length === 0 ? (
+              <p className="surface-card p-4 text-sm text-secondary">No published events.</p>
+            ) : null}
           </div>
         </div>
       )}
@@ -660,10 +821,14 @@ export default async function AdminPage({
             {cancelledEvents.map((event) => (
               <div key={event.id} className="surface-card p-4 text-sm">
                 <p className="font-semibold text-primary">{event.name}</p>
-                <p className="mt-1 text-secondary">{new Date(event.date).toLocaleString()} • {event.location}</p>
+                <p className="mt-1 text-secondary">
+                  {new Date(event.date).toLocaleString()} • {event.location}
+                </p>
               </div>
             ))}
-            {cancelledEvents.length === 0 ? <p className="surface-card p-4 text-sm text-secondary">No cancelled events.</p> : null}
+            {cancelledEvents.length === 0 ? (
+              <p className="surface-card p-4 text-sm text-secondary">No cancelled events.</p>
+            ) : null}
           </div>
         </div>
       )}
@@ -678,7 +843,9 @@ export default async function AdminPage({
                 <p className="mt-1 text-secondary">{new Date(event.createdAt).toLocaleString()}</p>
               </div>
             ))}
-            {deletedEvents.length === 0 ? <p className="surface-card p-4 text-sm text-secondary">No deleted events.</p> : null}
+            {deletedEvents.length === 0 ? (
+              <p className="surface-card p-4 text-sm text-secondary">No deleted events.</p>
+            ) : null}
           </div>
         </div>
       )}
