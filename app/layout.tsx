@@ -26,7 +26,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
               </Link>
               <div className="flex items-center gap-4 text-sm text-secondary">
                 {user?.role === "admin" ? (
-                  <Link href="/admin" className="transition hover:text-primary">Admin</Link>
+                  <Link href="/admin?view=pending-events" className="transition hover:text-primary">Admin</Link>
                 ) : null}
                 {user ? (
                   <div className="flex items-center gap-3">
