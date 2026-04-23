@@ -1,12 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import type { Route } from "next";
-import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 
 export function LoginForm() {
-  const router = useRouter();
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -39,8 +36,7 @@ export function LoginForm() {
       }
 
       const redirectPath = new URLSearchParams(window.location.search).get("redirect") || "/";
-      router.replace(redirectPath as Route);
-      router.refresh();
+      window.location.assign(redirectPath);
     } catch (error) {
       console.error("Login request failed:", error);
       setError("Something went wrong while logging in.");
