@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { getSessionUser } from "@/lib/server-auth";
 import { TicketForm } from "@/components/forms/ticket-form";
 import { VoteButton } from "@/components/forms/vote-button";
+import { AsyncForm } from "@/components/ui/async-form";
 
 function asObject(customFields: unknown): Record<string, unknown> {
   if (!customFields || typeof customFields !== "object" || Array.isArray(customFields)) {
@@ -351,7 +352,7 @@ export default async function EventDetailsPage({ params }: { params: { id: strin
                 {myReview ? "Edit Your Pending Review" : "Write a Review"}
               </p>
 
-              <form action={`/api/events/${event.id}/reviews`} method="post" className="space-y-3">
+              <AsyncForm action={`/api/events/${event.id}/reviews`} method="post" redirectTo={`/events/${event.id}`} className="space-y-3">
                 <div className="grid gap-3 sm:grid-cols-2">
                   <label className="space-y-1 text-sm text-secondary">
                     Rating (1-5)
@@ -397,14 +398,14 @@ export default async function EventDetailsPage({ params }: { params: { id: strin
                     {myReview ? "Update Pending Review" : "Submit Review"}
                   </button>
                 </div>
-              </form>
+              </AsyncForm>
 
               {myReview ? (
-                <form action={`/api/events/${event.id}/reviews/delete`} method="post">
+                <AsyncForm action={`/api/events/${event.id}/reviews/delete`} method="post" redirectTo={`/events/${event.id}`}>
                   <button className="rounded-lg bg-slate-200 px-4 py-2 text-sm font-semibold text-primary transition hover:bg-slate-300">
                     Delete Pending Review
                   </button>
-                </form>
+                </AsyncForm>
               ) : null}
             </div>
           )}

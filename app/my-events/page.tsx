@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { getSessionUser } from "@/lib/server-auth";
 import { prisma } from "@/lib/prisma";
+import { AsyncForm } from "@/components/ui/async-form";
 
 function getEventState(event: {
   approved: boolean;
@@ -62,6 +63,18 @@ export default async function MyEventsPage() {
 
   const events = await prisma.event.findMany({
     where: { createdById: user.id },
+    select: {
+      id: true,
+      name: true,
+      category: true,
+      date: true,
+      location: true,
+      approved: true,
+      published: true,
+      cancelled: true,
+      deleted: true,
+      sponsorRequested: true
+    },
     orderBy: { createdAt: "desc" }
   });
 
@@ -123,7 +136,7 @@ export default async function MyEventsPage() {
                             >
                               Request Sponsorship
                             </Link>
-                            <form action={`/api/events/${event.id}`} method="post">
+                            <AsyncForm action={`/api/events/${event.id}`} method="post" redirectTo="/my-events">
                               <input type="hidden" name="action" value="publishWithoutSponsors" />
                               <button
                                 className="rounded-lg bg-accent px-3 py-2 text-sm font-semibold text-white transition hover:bg-emerald-600"
@@ -131,7 +144,7 @@ export default async function MyEventsPage() {
                               >
                                 Sponsors Ready & Publish
                               </button>
-                            </form>
+                            </AsyncForm>
                           </>
                         ) : null}
                       </div>

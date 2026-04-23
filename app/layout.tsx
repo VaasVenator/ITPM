@@ -15,7 +15,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             <nav className="mx-auto flex max-w-[92rem] items-center justify-between px-3 py-3 sm:px-4">
               <Link
                 href="/"
-                className="group inline-flex items-center gap-2 rounded-full border border-emerald-100 bg-white px-3 py-1.5 shadow-sm transition hover:shadow-md"
+                className="group relative z-30 inline-flex cursor-pointer items-center gap-2 rounded-full border border-emerald-100 bg-white px-3 py-1.5 shadow-sm transition hover:shadow-md"
               >
                 <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-gradient-to-br from-emerald-300 to-emerald-600 text-[10px] font-black text-white shadow-sm">
                   SV
@@ -26,7 +26,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
               </Link>
               <div className="flex items-center gap-4 text-sm text-secondary">
                 {user?.role === "admin" ? (
-                  <Link href="/admin" className="transition hover:text-primary">Admin</Link>
+                  <Link href="/admin?view=pending-events" className="transition hover:text-primary">Admin</Link>
                 ) : null}
                 {user ? (
                   <div className="flex items-center gap-3">

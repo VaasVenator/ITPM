@@ -112,7 +112,7 @@ async function loadAdminData(activeView: AdminView) {
       approvedEventCount,
       rejectedEventCount,
       eventReviewPairs
-    ] = await Promise.all([
+    ] = await prisma.$transaction([
       prisma.event.count({ where: { deleted: false } }),
       prisma.event.count({
         where: { deleted: false, reviewStatus: "APPROVED" } as any
@@ -141,7 +141,25 @@ async function loadAdminData(activeView: AdminView) {
       events.push(
         ...(await prisma.event.findMany({
           where: { deleted: false, reviewStatus: "PENDING" } as any,
-          include: { createdBy: true },
+          select: {
+            id: true,
+            name: true,
+            category: true,
+            date: true,
+            location: true,
+            description: true,
+            eventImage: true,
+            ticketRequired: true,
+            createdAt: true,
+            reviewStatus: true,
+            createdBy: {
+              select: {
+                id: true,
+                name: true,
+                email: true
+              }
+            }
+          },
           orderBy: { createdAt: "desc" }
         }))
       );
@@ -151,7 +169,18 @@ async function loadAdminData(activeView: AdminView) {
       reviewedEvents.push(
         ...(await prisma.event.findMany({
           where: { reviewStatus: { not: "PENDING" } } as any,
-          include: { createdBy: true },
+          select: {
+            id: true,
+            name: true,
+            reviewStatus: true,
+            adminComment: true,
+            reviewedAt: true,
+            createdBy: {
+              select: {
+                name: true
+              }
+            }
+          },
           orderBy: { reviewedAt: "desc" } as any
         }))
       );
@@ -175,7 +204,24 @@ async function loadAdminData(activeView: AdminView) {
       events.push(
         ...(await prisma.event.findMany({
           where: { deleted: false, approved: false },
-          include: { createdBy: true },
+          select: {
+            id: true,
+            name: true,
+            category: true,
+            date: true,
+            location: true,
+            description: true,
+            eventImage: true,
+            ticketRequired: true,
+            createdAt: true,
+            createdBy: {
+              select: {
+                id: true,
+                name: true,
+                email: true
+              }
+            }
+          },
           orderBy: { createdAt: "desc" }
         }))
       );
@@ -188,7 +234,7 @@ async function loadAdminData(activeView: AdminView) {
       approvedTicketCount,
       rejectedTicketCount,
       ticketReviewPairs
-    ] = await Promise.all([
+    ] = await prisma.$transaction([
       prisma.ticket.count(),
       prisma.ticket.count({
         where: { reviewStatus: "APPROVED" } as any
@@ -216,7 +262,22 @@ async function loadAdminData(activeView: AdminView) {
       tickets.push(
         ...(await prisma.ticket.findMany({
           where: { reviewStatus: "PENDING" } as any,
-          include: { event: true, user: true },
+          select: {
+            id: true,
+            price: true,
+            paymentSlip: true,
+            notes: true,
+            user: {
+              select: {
+                name: true
+              }
+            },
+            event: {
+              select: {
+                name: true
+              }
+            }
+          },
           orderBy: { createdAt: "desc" }
         }))
       );
@@ -226,7 +287,22 @@ async function loadAdminData(activeView: AdminView) {
       reviewedTickets.push(
         ...(await prisma.ticket.findMany({
           where: { reviewStatus: { not: "PENDING" } } as any,
-          include: { event: true, user: true },
+          select: {
+            id: true,
+            reviewStatus: true,
+            adminComment: true,
+            reviewedAt: true,
+            user: {
+              select: {
+                name: true
+              }
+            },
+            event: {
+              select: {
+                name: true
+              }
+            }
+          },
           orderBy: { reviewedAt: "desc" } as any
         }))
       );
@@ -250,7 +326,22 @@ async function loadAdminData(activeView: AdminView) {
       tickets.push(
         ...(await prisma.ticket.findMany({
           where: { approved: false },
-          include: { event: true, user: true },
+          select: {
+            id: true,
+            price: true,
+            paymentSlip: true,
+            notes: true,
+            user: {
+              select: {
+                name: true
+              }
+            },
+            event: {
+              select: {
+                name: true
+              }
+            }
+          },
           orderBy: { createdAt: "desc" }
         }))
       );
@@ -295,7 +386,31 @@ async function loadAdminData(activeView: AdminView) {
       refunds.push(
         ...(await refundRequestModel.findMany({
           where: { status: "PENDING" },
-          include: { user: true, ticket: { include: { event: true } } },
+          select: {
+            id: true,
+            amount: true,
+            reason: true,
+            status: true,
+            createdAt: true,
+            user: {
+              select: {
+                id: true,
+                name: true,
+                email: true
+              }
+            },
+            ticket: {
+              select: {
+                id: true,
+                event: {
+                  select: {
+                    id: true,
+                    name: true
+                  }
+                }
+              }
+            }
+          },
           orderBy: { createdAt: "desc" }
         }))
       );
@@ -305,7 +420,33 @@ async function loadAdminData(activeView: AdminView) {
       reviewedRefunds.push(
         ...(await refundRequestModel.findMany({
           where: { status: { not: "PENDING" } },
-          include: { user: true, ticket: { include: { event: true } } },
+          select: {
+            id: true,
+            amount: true,
+            reason: true,
+            status: true,
+            createdAt: true,
+            reviewedAt: true,
+            adminComment: true,
+            user: {
+              select: {
+                id: true,
+                name: true,
+                email: true
+              }
+            },
+            ticket: {
+              select: {
+                id: true,
+                event: {
+                  select: {
+                    id: true,
+                    name: true
+                  }
+                }
+              }
+            }
+          },
           orderBy: { reviewedAt: "desc" }
         }))
       );
@@ -316,7 +457,18 @@ async function loadAdminData(activeView: AdminView) {
     publishedEvents.push(
       ...(await prisma.event.findMany({
         where: { approved: true, published: true, deleted: false },
-        include: { createdBy: true },
+        select: {
+          id: true,
+          name: true,
+          date: true,
+          location: true,
+          createdBy: {
+            select: {
+              id: true,
+              name: true
+            }
+          }
+        },
         orderBy: { date: "asc" }
       }))
     );
@@ -326,7 +478,18 @@ async function loadAdminData(activeView: AdminView) {
     cancelledEvents.push(
       ...(await prisma.event.findMany({
         where: { cancelled: true, deleted: false },
-        include: { createdBy: true },
+        select: {
+          id: true,
+          name: true,
+          date: true,
+          location: true,
+          createdBy: {
+            select: {
+              id: true,
+              name: true
+            }
+          }
+        },
         orderBy: { date: "desc" }
       }))
     );
@@ -336,7 +499,17 @@ async function loadAdminData(activeView: AdminView) {
     deletedEvents.push(
       ...(await prisma.event.findMany({
         where: { deleted: true },
-        include: { createdBy: true },
+        select: {
+          id: true,
+          name: true,
+          createdAt: true,
+          createdBy: {
+            select: {
+              id: true,
+              name: true
+            }
+          }
+        },
         orderBy: { createdAt: "desc" }
       }))
     );
@@ -371,7 +544,7 @@ export default async function AdminPage({
 
   const activeView: AdminView = VIEWS.some((v) => v.id === searchParams?.view)
     ? (searchParams?.view as AdminView)
-    : "pending-approvals";
+    : "pending-events";
 
   let data;
   try {
