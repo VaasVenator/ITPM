@@ -4,16 +4,19 @@ import { prisma } from "@/lib/prisma";
 import { AsyncForm } from "@/components/ui/async-form";
 import { ApprovalMetrics } from "@/components/approval-metrics";
 import { ApprovalFilterSection } from "@/components/approval-filter-section";
+import ReviewReports, { type ReviewReportRow } from "@/components/admin/review-reports";
 
 type AdminView =
   | "pending-approvals"
+  | "pending-reviews"
   | "pending-events"
   | "published-events"
   | "cancelled-events"
   | "deleted-events"
   | "pending-tickets"
   | "pending-refunds"
-  | "review-history";
+  | "review-history"
+  | "review-analytics";
 
 type ApprovalMetricStats = {
   totalApproved: number;
@@ -50,15 +53,19 @@ type RefundRequest = {
   };
 };
 
+type ReviewAnalyticsRow = ReviewReportRow;
+
 const VIEWS: Array<{ id: AdminView; label: string }> = [
   { id: "pending-approvals", label: "All Pending Approvals" },
+  { id: "pending-reviews", label: "Pending Reviews" },
   { id: "pending-events", label: "Pending Event Approvals" },
   { id: "published-events", label: "Published Events" },
   { id: "cancelled-events", label: "Cancelled Events" },
   { id: "deleted-events", label: "Deleted Events" },
   { id: "pending-tickets", label: "Pending Ticket Slips" },
   { id: "pending-refunds", label: "Pending Refunds" },
-  { id: "review-history", label: "Review History" }
+  { id: "review-history", label: "Review History" },
+  { id: "review-analytics", label: "Review Analytics" }
 ];
 
 function parseTicketQuantity(notes: string | null): number {
@@ -71,6 +78,7 @@ function parseTicketQuantity(notes: string | null): number {
 async function loadAdminData(activeView: AdminView) {
   let supportsEventReviewHistory = true;
   let supportsTicketReviewHistory = true;
+  let supportsUserReviews = true;
   let supportsRefunds = true;
 
   let pendingEventCount = 0;
@@ -90,7 +98,9 @@ async function loadAdminData(activeView: AdminView) {
   };
 
   const events: any[] = [];
+  const pendingReviews: any[] = [];
   const reviewedEvents: any[] = [];
+  const reviewedUserReviews: any[] = [];
   const tickets: any[] = [];
   const reviewedTickets: any[] = [];
   const refunds: RefundRequest[] = [];
@@ -98,6 +108,7 @@ async function loadAdminData(activeView: AdminView) {
   const publishedEvents: any[] = [];
   const cancelledEvents: any[] = [];
   const deletedEvents: any[] = [];
+  const reviewAnalytics: ReviewAnalyticsRow[] = [];
 
   let totalEventItems = 0;
   let totalTicketItems = 0;
@@ -185,6 +196,158 @@ async function loadAdminData(activeView: AdminView) {
         }))
       );
     }
+
+    if (activeView === "pending-reviews" || activeView === "pending-approvals") {
+      const eventReviewModel = (prisma as any).eventReview;
+      if (eventReviewModel) {
+        pendingReviews.push(
+          ...((await eventReviewModel.findMany({
+            where: { moderationStatus: "PENDING" },
+            select: {
+              id: true,
+              rating: true,
+              comment: true,
+              anonymous: true,
+              createdAt: true,
+              user: {
+                select: {
+                  id: true,
+                  name: true
+                }
+              },
+              event: {
+                select: {
+                  id: true,
+                  name: true,
+                  category: true
+                }
+              }
+            },
+            orderBy: { createdAt: "desc" }
+          })) as Array<{
+            id: string;
+            rating: number;
+            comment: string;
+            anonymous: boolean;
+            createdAt: Date;
+            user: { id: string; name: string };
+            event: { id: string; name: string; category: string };
+          }>)
+        );
+      } else {
+        supportsUserReviews = false;
+      }
+    }
+
+    if (activeView === "review-history") {
+      const eventReviewModel = (prisma as any).eventReview;
+      if (eventReviewModel) {
+        reviewedUserReviews.push(
+          ...((await eventReviewModel.findMany({
+            where: { moderationStatus: { not: "PENDING" } },
+            select: {
+              id: true,
+              rating: true,
+              comment: true,
+              anonymous: true,
+              moderationStatus: true,
+              adminComment: true,
+              moderatedAt: true,
+              createdAt: true,
+              user: {
+                select: {
+                  id: true,
+                  name: true
+                }
+              },
+              event: {
+                select: {
+                  id: true,
+                  name: true
+                }
+              }
+            },
+            orderBy: { moderatedAt: "desc" }
+          })) as Array<{
+            id: string;
+            rating: number;
+            comment: string;
+            anonymous: boolean;
+            moderationStatus: string;
+            adminComment: string | null;
+            moderatedAt: Date | null;
+            createdAt: Date;
+            user: { id: string; name: string };
+            event: { id: string; name: string };
+          }>)
+        );
+      } else {
+        supportsUserReviews = false;
+      }
+    }
+
+    if (activeView === "review-analytics") {
+      const eventReviewModel = (prisma as any).eventReview;
+      if (eventReviewModel) {
+        reviewAnalytics.push(
+          ...((await eventReviewModel.findMany({
+            select: {
+              id: true,
+              eventId: true,
+              rating: true,
+              comment: true,
+              anonymous: true,
+              moderationStatus: true,
+              adminComment: true,
+              createdAt: true,
+              moderatedAt: true,
+              user: {
+                select: {
+                  id: true,
+                  name: true
+                }
+              },
+              event: {
+                select: {
+                  id: true,
+                  name: true,
+                  category: true
+                }
+              }
+            },
+            orderBy: { createdAt: "desc" }
+          })) as Array<{
+            id: string;
+            eventId: string;
+            rating: number;
+            comment: string;
+            anonymous: boolean;
+            moderationStatus: "PENDING" | "APPROVED" | "REJECTED";
+            adminComment: string | null;
+            createdAt: Date;
+            moderatedAt: Date | null;
+            user: { id: string; name: string };
+            event: { id: string; name: string; category: ReviewReportRow["eventCategory"] };
+          }>).map((review) => ({
+            id: review.id,
+            eventId: review.eventId,
+            eventName: review.event.name,
+            eventCategory: review.event.category,
+            userName: review.user.name,
+            userId: review.user.id,
+            rating: review.rating,
+            comment: review.comment,
+            anonymous: review.anonymous,
+            moderationStatus: review.moderationStatus,
+            adminComment: review.adminComment,
+            createdAt: review.createdAt.toISOString(),
+            moderatedAt: review.moderatedAt ? review.moderatedAt.toISOString() : null
+          }))
+        );
+      } else {
+        supportsUserReviews = false;
+      }
+    }
   } catch (error) {
     if (!(error instanceof Error) || !error.message.includes("Unknown argument `reviewStatus`")) {
       throw error;
@@ -267,13 +430,18 @@ async function loadAdminData(activeView: AdminView) {
             price: true,
             paymentSlip: true,
             notes: true,
+            createdAt: true,
+            reviewStatus: true,
             user: {
               select: {
-                name: true
+                id: true,
+                name: true,
+                email: true
               }
             },
             event: {
               select: {
+                id: true,
                 name: true
               }
             }
@@ -331,13 +499,17 @@ async function loadAdminData(activeView: AdminView) {
             price: true,
             paymentSlip: true,
             notes: true,
+            createdAt: true,
             user: {
               select: {
-                name: true
+                id: true,
+                name: true,
+                email: true
               }
             },
             event: {
               select: {
+                id: true,
                 name: true
               }
             }
@@ -517,17 +689,21 @@ async function loadAdminData(activeView: AdminView) {
 
   return {
     events,
+    pendingReviews,
     reviewedEvents,
+    reviewedUserReviews,
     tickets,
     reviewedTickets,
     refunds,
     reviewedRefunds,
+    reviewAnalytics,
     metricStats,
     publishedEvents,
     cancelledEvents,
     deletedEvents,
     supportsRefunds,
-    supportsReviewHistory: supportsEventReviewHistory && supportsTicketReviewHistory
+    supportsReviewHistory: supportsEventReviewHistory && supportsTicketReviewHistory,
+    supportsUserReviews
   };
 }
 
@@ -572,37 +748,26 @@ export default async function AdminPage({
 
   const {
     events,
+    pendingReviews,
     reviewedEvents,
+    reviewedUserReviews,
     tickets,
     reviewedTickets,
     refunds,
     reviewedRefunds,
+    reviewAnalytics,
     metricStats,
     publishedEvents,
     cancelledEvents,
     deletedEvents,
     supportsRefunds,
-    supportsReviewHistory
+    supportsReviewHistory,
+    supportsUserReviews
   } = data;
 
   const plainTickets = tickets.map((ticket) => ({
     ...ticket,
-    price: Number(ticket.price),
-    reviewedAt: ticket.reviewedAt ? new Date(ticket.reviewedAt).toISOString() : null,
-    createdAt: ticket.createdAt ? new Date(ticket.createdAt).toISOString() : null,
-    event: ticket.event
-      ? {
-          ...ticket.event,
-          date: ticket.event.date ? new Date(ticket.event.date).toISOString() : null,
-          createdAt: ticket.event.createdAt ? new Date(ticket.event.createdAt).toISOString() : null
-        }
-      : ticket.event,
-    user: ticket.user
-      ? {
-          ...ticket.user,
-          createdAt: ticket.user.createdAt ? new Date(ticket.user.createdAt).toISOString() : null
-        }
-      : ticket.user
+    price: Number(ticket.price)
   }));
 
   return (
@@ -631,6 +796,86 @@ export default async function AdminPage({
         <div>
           <h2 className="mb-4 text-xl font-semibold text-primary">All Pending Approvals</h2>
           <ApprovalFilterSection events={events} tickets={plainTickets} />
+
+          {pendingReviews.length > 0 ? (
+            <div className="mt-6 space-y-3">
+              <h3 className="text-lg font-semibold text-primary">Pending Review Moderation</h3>
+              {pendingReviews.map((review) => (
+                <div key={review.id} className="surface-card p-4 text-sm">
+                  <p className="font-semibold text-primary">
+                    {review.event.name} • {review.anonymous ? "Anonymous" : review.user.name}
+                  </p>
+                  <p className="mt-1 text-secondary">Category: {review.event.category}</p>
+                  <p className="text-secondary">Rating: {review.rating}/5</p>
+                  <p className="text-secondary">Submitted: {new Date(review.createdAt).toLocaleString()}</p>
+                  <p className="mt-2 text-secondary">{review.comment}</p>
+
+                  <div className="mt-4 grid gap-3 md:grid-cols-2">
+                    <AsyncForm action={`/api/admin/reviews/${review.id}/approve`} method="post" redirectTo="/admin?view=pending-reviews" className="space-y-2 rounded-xl border border-slate-200 p-3">
+                      <label className="block text-xs font-semibold text-secondary">Approval Comment</label>
+                      <textarea name="adminComment" rows={3} className="w-full rounded-lg border border-slate-300 p-2" placeholder="Optional approval note" />
+                      <button className="rounded-lg bg-accent px-3 py-2 font-semibold text-white transition hover:bg-emerald-600">
+                        Approve Review
+                      </button>
+                    </AsyncForm>
+
+                    <AsyncForm action={`/api/admin/reviews/${review.id}/reject`} method="post" redirectTo="/admin?view=pending-reviews" className="space-y-2 rounded-xl border border-slate-200 p-3">
+                      <label className="block text-xs font-semibold text-secondary">Rejection Reason</label>
+                      <textarea name="adminComment" rows={3} className="w-full rounded-lg border border-slate-300 p-2" placeholder="Reason is required" required />
+                      <button className="rounded-lg bg-primary px-3 py-2 font-semibold text-white transition hover:bg-slate-800">
+                        Reject Review
+                      </button>
+                    </AsyncForm>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : null}
+        </div>
+      )}
+
+      {activeView === "pending-reviews" && (
+        <div>
+          <h2 className="mb-3 text-xl font-semibold text-primary">Pending Reviews</h2>
+          {!supportsUserReviews ? (
+            <p className="surface-card p-4 text-sm text-secondary">
+              Pending reviews are not available yet because this database is still missing the review schema.
+            </p>
+          ) : pendingReviews.length === 0 ? (
+            <p className="surface-card p-4 text-sm text-secondary">No pending reviews.</p>
+          ) : (
+            <div className="space-y-3">
+              {pendingReviews.map((review) => (
+                <div key={review.id} className="surface-card p-4 text-sm">
+                  <p className="font-semibold text-primary">
+                    {review.event.name} • {review.anonymous ? "Anonymous" : review.user.name}
+                  </p>
+                  <p className="mt-1 text-secondary">Category: {review.event.category}</p>
+                  <p className="text-secondary">Rating: {review.rating}/5</p>
+                  <p className="text-secondary">Submitted: {new Date(review.createdAt).toLocaleString()}</p>
+                  <p className="mt-2 text-secondary">{review.comment}</p>
+
+                  <div className="mt-4 grid gap-3 md:grid-cols-2">
+                    <AsyncForm action={`/api/admin/reviews/${review.id}/approve`} method="post" redirectTo="/admin?view=pending-reviews" className="space-y-2 rounded-xl border border-slate-200 p-3">
+                      <label className="block text-xs font-semibold text-secondary">Approval Comment</label>
+                      <textarea name="adminComment" rows={3} className="w-full rounded-lg border border-slate-300 p-2" placeholder="Optional approval note" />
+                      <button className="rounded-lg bg-accent px-3 py-2 font-semibold text-white transition hover:bg-emerald-600">
+                        Approve Review
+                      </button>
+                    </AsyncForm>
+
+                    <AsyncForm action={`/api/admin/reviews/${review.id}/reject`} method="post" redirectTo="/admin?view=pending-reviews" className="space-y-2 rounded-xl border border-slate-200 p-3">
+                      <label className="block text-xs font-semibold text-secondary">Rejection Reason</label>
+                      <textarea name="adminComment" rows={3} className="w-full rounded-lg border border-slate-300 p-2" placeholder="Reason is required" required />
+                      <button className="rounded-lg bg-primary px-3 py-2 font-semibold text-white transition hover:bg-slate-800">
+                        Reject Review
+                      </button>
+                    </AsyncForm>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
@@ -965,7 +1210,49 @@ export default async function AdminPage({
               </div>
             )}
           </div>
+
+          <div>
+            <h2 className="mb-3 text-xl font-semibold text-primary">Reviewed User Reviews</h2>
+            {!supportsUserReviews ? (
+              <p className="surface-card p-4 text-sm text-secondary">
+                Reviewed user reviews are not available yet because this database is still missing the review schema.
+              </p>
+            ) : (
+              <div className="space-y-3">
+                {reviewedUserReviews.map((review) => (
+                  <div key={review.id} className="surface-card p-4 text-sm">
+                    <p className="font-semibold text-primary">
+                      {review.event.name} • {review.anonymous ? "Anonymous" : review.user.name}
+                    </p>
+                    <p className="text-secondary">Status: {review.moderationStatus}</p>
+                    <p className="text-secondary">Rating: {review.rating}/5</p>
+                    <p className="text-secondary">Submitted: {new Date(review.createdAt).toLocaleString()}</p>
+                    <p className="mt-2 text-secondary">{review.comment}</p>
+                    <p className="mt-2 text-secondary">
+                      Admin Comment: {review.adminComment || "No comment provided"}
+                    </p>
+                    <p className="text-secondary">
+                      Moderated At: {review.moderatedAt ? new Date(review.moderatedAt).toLocaleString() : "Not moderated yet"}
+                    </p>
+                  </div>
+                ))}
+                {reviewedUserReviews.length === 0 ? (
+                  <p className="surface-card p-4 text-sm text-secondary">No reviewed user reviews yet.</p>
+                ) : null}
+              </div>
+            )}
+          </div>
         </div>
+      )}
+
+      {activeView === "review-analytics" && (
+        supportsUserReviews ? (
+          <ReviewReports reviews={reviewAnalytics} />
+        ) : (
+          <p className="surface-card p-4 text-sm text-secondary">
+            Review analytics are not available yet because this database is still missing the review schema.
+          </p>
+        )
       )}
 
       {activeView === "published-events" && (
