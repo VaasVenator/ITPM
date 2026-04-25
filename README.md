@@ -50,3 +50,20 @@ Tech stack: Next.js App Router, TypeScript, Tailwind CSS, Prisma ORM, PostgreSQL
 - Sponsorship request + SMTP email dispatch
 - Voting (`RSVP` and `organiserVote`)
 - Organiser badge assignment after admin event approval
+
+## Playwright testing scenario
+
+The end-to-end tests live in `prisma/tests` and use the same Next.js server.
+
+Set these environment variables before running the authenticated scenario:
+
+- `E2E_LOGIN_IDENTIFIER`
+- `E2E_LOGIN_PASSWORD`
+
+Then run:
+
+```bash
+npm run test:e2e
+```
+
+The main scenario covers the protected `/profile` route, logs in through the UI, and verifies that the `session_token` cookie is created and the profile page loads successfully.

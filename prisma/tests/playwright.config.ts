@@ -12,7 +12,7 @@ export default defineConfig({
     command: "next dev",
     cwd: path.join(__dirname, "../.."),
     url: "http://127.0.0.1:3000",
-    reuseExistingServer: false,
+    reuseExistingServer: true,
     timeout: 120_000,
   },
   workers: 1,

@@ -112,11 +112,6 @@ export function EventForm() {
       return;
     }
 
-    if (!eventImage) {
-      setFormError("Event image is required.");
-      return;
-    }
-
     const categoryFieldValues = Object.fromEntries(
       customFields.map((label) => [label, String(formData.get(label) || "")])
     );
@@ -146,7 +141,7 @@ export function EventForm() {
       })(),
       location: String(formData.get("location") || ""),
       description: String(formData.get("description") || ""),
-      eventImage,
+      eventImage: eventImage || undefined,
       ticketRequired: ticketRequiredValue,
       customFields: {
         ...categoryFieldValues,
@@ -272,17 +267,16 @@ export function EventForm() {
           <p className="text-xs font-semibold uppercase tracking-[0.22em] text-accent">Step 3</p>
           <h2 className="mt-1 text-2xl font-bold tracking-tight text-primary">Visual Identity</h2>
           <p className="mt-2 text-sm text-secondary">
-            Upload the main poster, artist visual, or promotional image that represents the event.
+            Upload the main poster, artist visual, or promotional image that represents the event. Optional.
           </p>
 
           <div className="mt-5 rounded-2xl border border-dashed border-emerald-300 bg-white p-4">
-            <FieldShell label="Event Picture" hint="PNG or JPG, up to 500KB.">
+            <FieldShell label="Event Picture" hint="Optional. PNG or JPG, up to 500KB.">
               <input
                 className="input-field"
                 type="file"
                 accept="image/*"
                 onChange={(e) => void onPickImage(e.target.files?.[0] ?? null)}
-                required
               />
             </FieldShell>
 

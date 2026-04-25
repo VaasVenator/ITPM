@@ -38,7 +38,7 @@ export const eventSchema = z.object({
   date: z.string(),
   location: z.string().min(2),
   description: z.string().optional(),
-  eventImage: z.string().min(1, "Event image is required."),
+  eventImage: z.string().optional(),
   customFields: z.record(z.string()).optional(),
   ticketRequired: z.boolean(),
   sponsorRequested: z.boolean().optional(),
